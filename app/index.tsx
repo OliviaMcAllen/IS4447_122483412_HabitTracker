@@ -2,7 +2,7 @@
 // Week 3: useState + useFocusEffect for dynamic UI updates
 // Week 8: AuthContext for global authentication state
 // Week 11: Drizzle ORM for database reads/writes
-// UI updated using Week 4 UX principles: hierarchy, spacing, navigation clarity
+// Added: Category filter (Search & Filter requirement)
 
 import { eq } from 'drizzle-orm';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -43,14 +43,15 @@ export default function HomeScreen() {
   const { isLoading } = useContext(AuthContext);
   const router = useRouter();
 
-  // Week 3: Local state for UI rendering
   const [habitList, setHabitList] = useState<HabitWithCompletion[]>([]);
   const [categoryList, setCategoryList] = useState<Category[]>([]);
   const [completedCount, setCompletedCount] = useState(0);
 
+  // ✅ NEW: category filter state
+  const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
+
   const getTodayDate = () => new Date().toISOString().split('T')[0];
 
-  // Week 11: reload data when screen is focused
   useFocusEffect(
     useCallback(() => {
       loadData();
@@ -82,7 +83,6 @@ export default function HomeScreen() {
     }
   };
 
-  // Week 4: CRUD interaction (toggle completion)
   const toggleHabitCompletion = async (habitId: number, completedToday: boolean) => {
     try {
       const today = getTodayDate();
@@ -137,6 +137,12 @@ export default function HomeScreen() {
   const progressPercentage =
     habitList.length > 0 ? (completedCount / habitList.length) * 100 : 0;
 
+  // ✅ APPLY FILTER
+  const filteredHabits =
+    selectedCategory === null
+      ? habitList
+      : habitList.filter((h) => h.categoryId === selectedCategory);
+
   if (isLoading) {
     return (
       <SafeAreaView style={styles.center}>
@@ -149,27 +155,43 @@ export default function HomeScreen() {
     <SafeAreaView style={styles.screen}>
       <ScrollView contentContainerStyle={styles.container}>
 
-        {/* Header (Week 4: visual hierarchy) */}
         <View style={styles.header}>
           <Text style={styles.title}>Tide</Text>
           <Text style={styles.subtitle}>Your Daily Rhythm</Text>
         </View>
 
-        {/* Navigation buttons (Week 4 UX: quick access) */}
+        {/* Navigation */}
         <View style={styles.navRow}>
-          <TouchableOpacity
-            onPress={() => router.push('/stats')}
-            style={styles.navPrimary}
-          >
+          <TouchableOpacity onPress={() => router.push('/stats')} style={styles.navPrimary}>
             <Text style={styles.navPrimaryText}>Statistics</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            onPress={() => router.push('/settings')}
-            style={styles.navSecondary}
-          >
+          <TouchableOpacity onPress={() => router.push('/settings')} style={styles.navSecondary}>
             <Text style={styles.navSecondaryText}>Settings</Text>
           </TouchableOpacity>
+        </View>
+
+        {/* ✅ FILTER UI */}
+        <View style={styles.filterRow}>
+          <TouchableOpacity
+            onPress={() => setSelectedCategory(null)}
+            style={[styles.filterButton, selectedCategory === null && styles.filterActive]}
+          >
+            <Text style={styles.filterText}>All</Text>
+          </TouchableOpacity>
+
+          {categoryList.map((cat) => (
+            <TouchableOpacity
+              key={cat.id}
+              onPress={() => setSelectedCategory(cat.id)}
+              style={[
+                styles.filterButton,
+                selectedCategory === cat.id && styles.filterActive,
+              ]}
+            >
+              <Text style={styles.filterText}>{cat.name}</Text>
+            </TouchableOpacity>
+          ))}
         </View>
 
         {/* Progress */}
@@ -187,36 +209,39 @@ export default function HomeScreen() {
         </View>
 
         {/* Habit List */}
-        {habitList.map((habit) => (
-          <View
-            key={habit.id}
-            style={[
-              styles.habitCard,
-              { borderLeftColor: getCategoryColour(habit.categoryId) },
-            ]}
-          >
-            <TouchableOpacity
-              onPress={() => toggleHabitCompletion(habit.id, habit.completedToday)}
+        {filteredHabits.length === 0 ? (
+          <Text style={styles.emptyText}>No habits in this category</Text>
+        ) : (
+          filteredHabits.map((habit) => (
+            <View
+              key={habit.id}
               style={[
-                styles.checkbox,
-                habit.completedToday && styles.checkboxChecked,
+                styles.habitCard,
+                { borderLeftColor: getCategoryColour(habit.categoryId) },
               ]}
-            />
+            >
+              <TouchableOpacity
+                onPress={() => toggleHabitCompletion(habit.id, habit.completedToday)}
+                style={[
+                  styles.checkbox,
+                  habit.completedToday && styles.checkboxChecked,
+                ]}
+              />
 
-            <View style={styles.habitInfo}>
-              <Text style={styles.habitName}>{habit.name}</Text>
-              <Text style={styles.habitMeta}>
-                {getCategoryName(habit.categoryId)}
-              </Text>
+              <View style={styles.habitInfo}>
+                <Text style={styles.habitName}>{habit.name}</Text>
+                <Text style={styles.habitMeta}>
+                  {getCategoryName(habit.categoryId)}
+                </Text>
+              </View>
+
+              <TouchableOpacity onPress={() => deleteHabit(habit.id)}>
+                <Text style={styles.deleteText}>Remove</Text>
+              </TouchableOpacity>
             </View>
+          ))
+        )}
 
-            <TouchableOpacity onPress={() => deleteHabit(habit.id)}>
-              <Text style={styles.deleteText}>Remove</Text>
-            </TouchableOpacity>
-          </View>
-        ))}
-
-        {/* Primary Action */}
         <TouchableOpacity
           onPress={() => router.push('/add-habit')}
           style={styles.primaryButton}
@@ -229,7 +254,6 @@ export default function HomeScreen() {
   );
 }
 
-// Styling (Week 4: spacing, alignment, consistency)
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
@@ -284,6 +308,28 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
 
+  /* FILTER */
+  filterRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 16,
+  },
+  filterButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: '#E5E7EB',
+    borderRadius: 6,
+  },
+  filterActive: {
+    backgroundColor: colours.accentBlue,
+  },
+  filterText: {
+    fontSize: 12,
+    color: '#1F2937',
+    fontWeight: '500',
+  },
+
   card: {
     backgroundColor: '#fff',
     padding: 14,
@@ -292,6 +338,7 @@ const styles = StyleSheet.create({
     borderColor: '#E5E7EB',
     marginBottom: 20,
   },
+
   progressRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -325,6 +372,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     borderLeftWidth: 4,
   },
+
   checkbox: {
     width: 20,
     height: 20,
@@ -336,6 +384,7 @@ const styles = StyleSheet.create({
     backgroundColor: colours.accentBlue,
     borderColor: colours.accentBlue,
   },
+
   habitInfo: {
     flex: 1,
   },
@@ -347,9 +396,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6B7280',
   },
+
   deleteText: {
     fontSize: 12,
     color: '#DC2626',
+  },
+
+  emptyText: {
+    textAlign: 'center',
+    color: '#6B7280',
+    marginTop: 20,
   },
 
   primaryButton: {
