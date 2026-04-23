@@ -10,10 +10,10 @@ export async function seedDatabaseIfEmpty() {
 
   // Insert sample categories
   await db.insert(categories).values([
-    { name: 'Fitness', color: '#FF6B6B', icon: '💪' },
-    { name: 'Learning', color: '#4ECDC4', icon: '📚' },
-    { name: 'Health', color: '#95E1D3', icon: '🏥' },
-    { name: 'Productivity', color: '#FFE66D', icon: '⚡' },
+    { name: 'Fitness', colour: '#FF6B6B', icon: '💪' },
+    { name: 'Learning', colour: '#4ECDC4', icon: '📚' },
+    { name: 'Health', colour: '#95E1D3', icon: '🏥' },
+    { name: 'Productivity', colour: '#FFE66D', icon: '⚡' },
   ]);
 
   // Insert sample habits
