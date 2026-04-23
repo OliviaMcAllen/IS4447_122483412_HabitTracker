@@ -1,6 +1,18 @@
+import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+
+// Based on Week 11 tutorial - User authentication table
+// Stores user account information for login/logout functionality
+export const users = sqliteTable('users', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  email: text('email').notNull().unique(),
+  password: text('password').notNull(), // In production, this would be hashed
+  name: text('name').notNull(),
+  createdAt: text('createdAt').notNull(),
+});
+
+
 // Based on Week 11 Drizzle ORM tutorial
 // Defines the database tables for Habit Tracker
-import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 // Habits table - stores the habit definitions
 export const habits = sqliteTable('habits', {

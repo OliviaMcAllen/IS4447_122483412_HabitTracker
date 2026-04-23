@@ -1,14 +1,18 @@
 // Based on Week 8-9 tutorials - Statistics and insights screen with data visualisation
 // Demonstrates aggregating data from database and rendering charts
+// Week 3 tutorial: useState/useEffect hooks for state management
+// Week 11 tutorial: Drizzle ORM for database queries and data aggregation
+
 import { useContext, useEffect, useState } from 'react';
 import {
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
+import { colours } from '../constants/colours';
 import { db } from '../db/client';
 import { habitLogs, habits as habitsTable, targets as targetsTable } from '../db/schema';
 import { AuthContext } from './_layout';
@@ -30,7 +34,6 @@ type TargetProgress = {
 
 export default function StatsScreen() {
   const { isLoading } = useContext(AuthContext);
-
   const [habitStats, setHabitStats] = useState<HabitStat[]>([]);
   const [targetProgress, setTargetProgress] = useState<TargetProgress[]>([]);
   const [selectedPeriod, setSelectedPeriod] = useState<'week' | 'month'>('week');
@@ -39,102 +42,87 @@ export default function StatsScreen() {
     loadStatistics();
   }, [selectedPeriod]);
 
+  // Helper function to calculate date range
+  const getDateRange = (days: number) => {
+    const start = new Date();
+    start.setDate(start.getDate() - days);
+    return start;
+  };
+
+  // Helper function to calculate streak for a habit
+  const calculateStreak = (logs: any[]) => {
+    let streak = 0;
+    const today = new Date();
+    for (let i = 0; i < 365; i++) {
+      const checkDate = new Date(today);
+      checkDate.setDate(checkDate.getDate() - i);
+      const dateStr = checkDate.toISOString().split('T')[0];
+      if (logs.some((log) => log.date === dateStr)) {
+        streak++;
+      } else if (i > 0) {
+        break;
+      }
+    }
+    return streak;
+  };
+
+  // Load habit statistics and target progress from database
   const loadStatistics = async () => {
     try {
-      // Get all habits
       const allHabits = await db.select().from(habitsTable);
+      const allLogs = await db.select().from(habitLogs);
 
-      // Calculate stats for each habit
-      const stats = await Promise.all(
-        allHabits.map(async (habit: any) => {
-          // Get all logs for this habit
-          const logs = await db.select().from(habitLogs);
-          const habitLogsFiltered = logs.filter((log: any) => log.habitId === habit.id);
+      // Calculate habit statistics
+      const stats = allHabits.map((habit: any) => {
+        const habitLogsFiltered = allLogs.filter((log: any) => log.habitId === habit.id);
+        const weekStart = getDateRange(7);
+        const monthStart = getDateRange(30);
 
-          // Calculate week stats (last 7 days)
-          const weekStart = new Date();
-          weekStart.setDate(weekStart.getDate() - 7);
-          const weekLogsCount = habitLogsFiltered.filter((log: any) => {
-            const logDate = new Date(log.date);
-            return logDate >= weekStart;
-          }).length;
-
-          // Calculate month stats (last 30 days)
-          const monthStart = new Date();
-          monthStart.setDate(monthStart.getDate() - 30);
-          const monthLogsCount = habitLogsFiltered.filter((log: any) => {
-            const logDate = new Date(log.date);
-            return logDate >= monthStart;
-          }).length;
-
-          // Calculate streak (consecutive days with log)
-          let streak = 0;
-          const today = new Date();
-          for (let i = 0; i < 365; i++) {
-            const checkDate = new Date(today);
-            checkDate.setDate(checkDate.getDate() - i);
-            const dateStr = checkDate.toISOString().split('T')[0];
-
-            const hasLog = habitLogsFiltered.some((log: any) => log.date === dateStr);
-            if (hasLog) {
-              streak++;
-            } else if (i > 0) {
-              break;
-            }
-          }
-
-          return {
-            habitName: habit.name,
-            totalLogsThisWeek: weekLogsCount,
-            totalLogsThisMonth: monthLogsCount,
-            streak,
-          };
-        })
-      );
+        return {
+          habitName: habit.name,
+          totalLogsThisWeek: habitLogsFiltered.filter((log: any) => 
+            new Date(log.date) >= weekStart
+          ).length,
+          totalLogsThisMonth: habitLogsFiltered.filter((log: any) => 
+            new Date(log.date) >= monthStart
+          ).length,
+          streak: calculateStreak(habitLogsFiltered),
+        };
+      });
 
       setHabitStats(stats);
 
-      // Load target progress
+      // Calculate target progress
       const allTargets = await db.select().from(targetsTable);
-      const progress = await Promise.all(
-        allTargets.map(async (target: any) => {
-          const habit = allHabits.find((h: any) => h.id === target.habitId);
-          const logs = await db.select().from(habitLogs);
-          const habitLogsFiltered = logs.filter((log: any) => log.habitId === target.habitId);
+      const progress = allTargets.map((target: any) => {
+        const habit = allHabits.find((h: any) => h.id === target.habitId);
+        const habitLogsFiltered = allLogs.filter((log: any) => log.habitId === target.habitId);
 
-          let relevantLogs = habitLogsFiltered;
+        let relevantLogs = habitLogsFiltered;
+        if (target.period === 'weekly') {
+          relevantLogs = habitLogsFiltered.filter((log: any) => 
+            new Date(log.date) >= getDateRange(7)
+          );
+        } else if (target.period === 'daily') {
+          const today = new Date().toISOString().split('T')[0];
+          relevantLogs = habitLogsFiltered.filter((log: any) => log.date === today);
+        } else {
+          relevantLogs = habitLogsFiltered.filter((log: any) => 
+            new Date(log.date) >= getDateRange(30)
+          );
+        }
 
-          if (target.period === 'weekly') {
-            const weekStart = new Date();
-            weekStart.setDate(weekStart.getDate() - 7);
-            relevantLogs = habitLogsFiltered.filter((log: any) => {
-              const logDate = new Date(log.date);
-              return logDate >= weekStart;
-            });
-          } else if (target.period === 'daily') {
-            const today = new Date().toISOString().split('T')[0];
-            relevantLogs = habitLogsFiltered.filter((log: any) => log.date === today);
-          } else {
-            const monthStart = new Date();
-            monthStart.setDate(monthStart.getDate() - 30);
-            relevantLogs = habitLogsFiltered.filter((log: any) => {
-              const logDate = new Date(log.date);
-              return logDate >= monthStart;
-            });
-          }
+        const currentValue = relevantLogs.reduce((sum, log: any) => sum + log.count, 0);
+        const percentage = Math.min(100, (currentValue / target.targetValue) * 100);
 
-          const currentValue = relevantLogs.reduce((sum, log: any) => sum + log.count, 0);
-          const percentage = Math.min(100, (currentValue / target.targetValue) * 100);
-
-          return {
-            habitName: habit?.name || 'Unknown',
-            targetValue: target.targetValue,
-            currentValue,
-            period: target.period,
-            percentage,
-          };
-        })
-      );
+        return {
+          habitName: habit?.name || 'Unknown',
+          targetValue: target.targetValue,
+          currentValue,
+          period: target.period,
+          percentage,
+        };
+      });
 
       setTargetProgress(progress);
     } catch (error) {
@@ -150,94 +138,76 @@ export default function StatsScreen() {
     );
   }
 
+  // Helper to render bar chart item
+  const renderChartItem = (stat: HabitStat) => {
+    const value = selectedPeriod === 'week' ? stat.totalLogsThisWeek : stat.totalLogsThisMonth;
+    const maxValue = Math.max(
+      ...(selectedPeriod === 'week' 
+        ? habitStats.map((s) => s.totalLogsThisWeek)
+        : habitStats.map((s) => s.totalLogsThisMonth)),
+      1
+    );
+    const barWidth = (value / maxValue) * 100;
+
+    return (
+      <View key={stat.habitName} style={styles.chartItem}>
+        <View style={styles.chartLabel}>
+          <Text style={styles.chartLabelText}>{stat.habitName}</Text>
+          <Text style={styles.chartValue}>{value}</Text>
+        </View>
+        <View style={styles.barContainer}>
+          <View style={[styles.bar, { width: `${barWidth}%` }]} />
+        </View>
+      </View>
+    );
+  };
+
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#f9fafb' }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: colours.backgroundLight }}>
       <ScrollView contentContainerStyle={styles.container}>
-        <Text style={styles.title}>📊 Statistics</Text>
+        <Text style={styles.title}>Statistics</Text>
 
-        {/* Period selector */}
+        {/* Period selector buttons */}
         <View style={styles.periodSelector}>
-          <TouchableOpacity
-            onPress={() => setSelectedPeriod('week')}
-            style={[
-              styles.periodButton,
-              selectedPeriod === 'week' && styles.periodButtonActive,
-            ]}
-          >
-            <Text
+          {(['week', 'month'] as const).map((period) => (
+            <TouchableOpacity
+              key={period}
+              onPress={() => setSelectedPeriod(period)}
               style={[
-                styles.periodButtonText,
-                selectedPeriod === 'week' && styles.periodButtonTextActive,
+                styles.periodButton,
+                selectedPeriod === period && styles.periodButtonActive,
               ]}
             >
-              This Week
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => setSelectedPeriod('month')}
-            style={[
-              styles.periodButton,
-              selectedPeriod === 'month' && styles.periodButtonActive,
-            ]}
-          >
-            <Text
-              style={[
-                styles.periodButtonText,
-                selectedPeriod === 'month' && styles.periodButtonTextActive,
-              ]}
-            >
-              This Month
-            </Text>
-          </TouchableOpacity>
+              <Text
+                style={[
+                  styles.periodButtonText,
+                  selectedPeriod === period && styles.periodButtonTextActive,
+                ]}
+              >
+                {period === 'week' ? 'This Week' : 'This Month'}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
 
         {/* Habit completion chart */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Habit Completion</Text>
-
           {habitStats.length === 0 ? (
             <Text style={styles.emptyText}>No habit data yet</Text>
           ) : (
-            habitStats.map((stat, index) => {
-              const value =
-                selectedPeriod === 'week' ? stat.totalLogsThisWeek : stat.totalLogsThisMonth;
-              const maxValue =
-                selectedPeriod === 'week' ? Math.max(...habitStats.map((s) => s.totalLogsThisWeek), 1) : Math.max(...habitStats.map((s) => s.totalLogsThisMonth), 1);
-              const barWidth = (value / maxValue) * 100;
-
-              return (
-                <View key={index} style={styles.chartItem}>
-                  <View style={styles.chartLabel}>
-                    <Text style={styles.chartLabelText}>{stat.habitName}</Text>
-                    <Text style={styles.chartValue}>{value}</Text>
-                  </View>
-                  <View style={styles.barContainer}>
-                    <View
-                      style={[
-                        styles.bar,
-                        {
-                          width: `${barWidth}%`,
-                          backgroundColor: '#6366f1',
-                        },
-                      ]}
-                    />
-                  </View>
-                </View>
-              );
-            })
+            habitStats.map(renderChartItem)
           )}
         </View>
 
         {/* Streaks section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>🔥 Streaks</Text>
-
+          <Text style={styles.sectionTitle}>Streaks</Text>
           {habitStats.length === 0 ? (
             <Text style={styles.emptyText}>No streaks yet</Text>
           ) : (
-            habitStats.map((stat, index) => (
-              <View key={index} style={styles.streakCard}>
+            habitStats.map((stat) => (
+              <View key={stat.habitName} style={styles.streakCard}>
                 <Text style={styles.streakHabitName}>{stat.habitName}</Text>
                 <Text style={styles.streakValue}>{stat.streak} days</Text>
               </View>
@@ -248,42 +218,32 @@ export default function StatsScreen() {
         {/* Target progress section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Target Progress</Text>
-
           {targetProgress.length === 0 ? (
             <Text style={styles.emptyText}>No targets set yet</Text>
           ) : (
-            targetProgress.map((target, index) => (
-              <View key={index} style={styles.targetCard}>
+            targetProgress.map((target) => (
+              <View key={target.habitName} style={styles.targetCard}>
                 <View style={styles.targetHeader}>
                   <Text style={styles.targetName}>{target.habitName}</Text>
                   <Text style={styles.targetPeriod}>{target.period}</Text>
                 </View>
-
-                <View style={styles.progressContainer}>
-                  <View style={styles.progressBar}>
-                    <View
-                      style={[
-                        styles.progressFill,
-                        {
-                          width: `${target.percentage}%`,
-                          backgroundColor:
-                            target.percentage >= 100 ? '#10b981' : '#f59e0b',
-                        },
-                      ]}
-                    />
-                  </View>
-                  <Text style={styles.progressText}>
-                    {target.currentValue} / {target.targetValue}
+                <View style={styles.progressBar}>
+                  <View
+                    style={[
+                      styles.progressFill,
+                      {
+                        width: `${target.percentage}%`,
+                        backgroundColor: target.percentage >= 100 ? colours.catHealth : colours.catProductivity,
+                      },
+                    ]}
+                  />
+                </View>
+                <View style={styles.progressText}>
+                  <Text style={styles.progressLabel}>{target.currentValue} / {target.targetValue}</Text>
+                  <Text style={[styles.progressStatus, target.percentage >= 100 ? styles.targetMet : styles.targetNotMet]}>
+                    {target.percentage >= 100 ? 'Target met!' : `${Math.ceil(target.targetValue - target.currentValue)} remaining`}
                   </Text>
                 </View>
-
-                {target.percentage >= 100 ? (
-                  <Text style={styles.targetMet}>✓ Target met!</Text>
-                ) : (
-                  <Text style={styles.targetNotMet}>
-                    {Math.ceil(target.targetValue - target.currentValue)} remaining
-                  </Text>
-                )}
               </View>
             ))
           )}
@@ -302,7 +262,7 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '700',
     marginBottom: 20,
-    color: '#1f2937',
+    color: colours.textPrimary,
   },
   periodSelector: {
     flexDirection: 'row',
@@ -312,18 +272,17 @@ const styles = StyleSheet.create({
   periodButton: {
     flex: 1,
     paddingVertical: 10,
-    paddingHorizontal: 12,
     borderRadius: 6,
-    backgroundColor: '#e5e7eb',
+    backgroundColor: colours.backgroundDark,
     alignItems: 'center',
   },
   periodButtonActive: {
-    backgroundColor: '#6366f1',
+    backgroundColor: colours.accentBlue,
   },
   periodButtonText: {
     fontWeight: '600',
     fontSize: 13,
-    color: '#666',
+    color: colours.textSecondary,
   },
   periodButtonTextActive: {
     color: '#fff',
@@ -335,7 +294,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     marginBottom: 12,
-    color: '#1f2937',
+    color: colours.textPrimary,
   },
   chartItem: {
     marginBottom: 16,
@@ -348,25 +307,26 @@ const styles = StyleSheet.create({
   chartLabelText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#333',
+    color: colours.textPrimary,
   },
   chartValue: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#6366f1',
+    color: colours.accentBlue,
   },
   barContainer: {
     height: 24,
-    backgroundColor: '#e5e7eb',
+    backgroundColor: colours.backgroundDark,
     borderRadius: 4,
     overflow: 'hidden',
   },
   bar: {
     height: '100%',
+    backgroundColor: colours.accentBlue,
     borderRadius: 4,
   },
   streakCard: {
-    backgroundColor: '#fff',
+    backgroundColor: colours.cardBg,
     padding: 12,
     marginBottom: 8,
     borderRadius: 6,
@@ -374,20 +334,20 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     borderLeftWidth: 4,
-    borderLeftColor: '#ef4444',
+    borderLeftColor: colours.catFitness,
   },
   streakHabitName: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#333',
+    color: colours.textPrimary,
   },
   streakValue: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#ef4444',
+    color: colours.catFitness,
   },
   targetCard: {
-    backgroundColor: '#fff',
+    backgroundColor: colours.cardBg,
     padding: 16,
     marginBottom: 12,
     borderRadius: 6,
@@ -400,45 +360,46 @@ const styles = StyleSheet.create({
   targetName: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#1f2937',
+    color: colours.textPrimary,
   },
   targetPeriod: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#6b7280',
+    color: colours.textSecondary,
     textTransform: 'capitalize',
-  },
-  progressContainer: {
-    marginBottom: 8,
   },
   progressBar: {
     height: 8,
-    backgroundColor: '#e5e7eb',
+    backgroundColor: colours.backgroundDark,
     borderRadius: 4,
     overflow: 'hidden',
-    marginBottom: 6,
+    marginBottom: 8,
   },
   progressFill: {
     height: '100%',
     borderRadius: 4,
   },
   progressText: {
+    gap: 4,
+  },
+  progressLabel: {
     fontSize: 12,
-    color: '#666',
+    color: colours.textSecondary,
+    marginBottom: 4,
+  },
+  progressStatus: {
+    fontSize: 12,
+    fontWeight: '600',
   },
   targetMet: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#10b981',
+    color: colours.catHealth,
   },
   targetNotMet: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#ef4444',
+    color: colours.catFitness,
   },
   emptyText: {
     textAlign: 'center',
-    color: '#999',
+    color: colours.textSecondary,
     fontSize: 13,
     paddingVertical: 20,
   },

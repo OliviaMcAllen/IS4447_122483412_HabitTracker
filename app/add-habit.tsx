@@ -1,22 +1,27 @@
 // Based on Week 4 tutorial - Form screen for adding/editing habits
 // Demonstrates form handling with useState and database insert/update operations
+// Week 11 tutorial: Drizzle ORM for database insert and update operations
+// Week 3 tutorial: React hooks (useState, useEffect) for form state management
+
 import { eq } from 'drizzle-orm';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useContext, useEffect, useState } from 'react';
 import {
-    Alert,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Alert,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import FormField from '../components/FormField';
+import { colours } from '../constants/colours';
 import { db } from '../db/client';
 import { categories as categoriesTable, habits as habitsTable } from '../db/schema';
 import { AuthContext } from './_layout';
 
+// Type definition for Category record
 type Category = {
   id: number;
   name: string;
@@ -26,9 +31,10 @@ type Category = {
 
 export default function AddHabitScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams();
+  const { id } = useLocalSearchParams(); // Get habit ID from route params for editing
   const { isLoading } = useContext(AuthContext);
 
+  // Form state management using useState hook (Week 3 tutorial)
   const [habitName, setHabitName] = useState('');
   const [habitDescription, setHabitDescription] = useState('');
   const [selectedCategory, setSelectedCategory] = useState(1);
@@ -36,13 +42,17 @@ export default function AddHabitScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
 
+  // useEffect hook to load categories and habit data on mount
+  // Pattern from Week 3 tutorial - empty dependency array [] means runs once
   useEffect(() => {
     loadCategories();
     if (id) {
-      loadHabitForEditing(Number(id));
+      loadHabitForEditing(Number(id)); // Load existing habit if editing
     }
   }, [id]);
 
+  // Load all categories from database for the selector
+  // Uses Drizzle ORM pattern from Week 11 tutorial
   const loadCategories = async () => {
     try {
       const result = await db.select().from(categoriesTable);
@@ -52,6 +62,8 @@ export default function AddHabitScreen() {
     }
   };
 
+  // Load habit data when editing (READ operation from CRUD pattern)
+  // Uses Drizzle ORM where clause to filter by habit ID
   const loadHabitForEditing = async (habitId: number) => {
     try {
       const result = await db.select().from(habitsTable).where(eq(habitsTable.id, habitId));
@@ -60,14 +72,17 @@ export default function AddHabitScreen() {
         setHabitName(habit.name);
         setHabitDescription(habit.description || '');
         setSelectedCategory(habit.categoryId);
-        setIsEditing(true);
+        setIsEditing(true); // Flag that we are in edit mode
       }
     } catch (error) {
       console.error('Error loading habit:', error);
     }
   };
 
+  // Save habit to database (CREATE or UPDATE operation from CRUD pattern)
+  // Validates input before saving (Week 4 tutorial pattern for form validation)
   const saveHabit = async () => {
+    // Validate that habit name is not empty
     if (!habitName.trim()) {
       Alert.alert('Error', 'Habit name is required');
       return;
@@ -77,7 +92,8 @@ export default function AddHabitScreen() {
 
     try {
       if (isEditing && id) {
-        // Update existing habit
+        // UPDATE operation - modify existing habit
+        // Uses Drizzle ORM update and where clause (Week 11 tutorial)
         await db
           .update(habitsTable)
           .set({
@@ -87,9 +103,10 @@ export default function AddHabitScreen() {
           })
           .where(eq(habitsTable.id, Number(id)));
 
-        Alert.alert('Success', 'Habit updated!');
+        Alert.alert('Success', 'Habit updated');
       } else {
-        // Create new habit
+        // CREATE operation - insert new habit
+        // Uses Drizzle ORM insert method (Week 11 tutorial)
         await db.insert(habitsTable).values({
           name: habitName,
           description: habitDescription,
@@ -97,10 +114,10 @@ export default function AddHabitScreen() {
           createdAt: new Date().toISOString(),
         });
 
-        Alert.alert('Success', 'Habit created!');
+        Alert.alert('Success', 'Habit created');
       }
 
-      router.back();
+      router.back(); // Navigate back to home screen after save
     } catch (error) {
       console.error('Error saving habit:', error);
       Alert.alert('Error', 'Failed to save habit');
@@ -109,6 +126,7 @@ export default function AddHabitScreen() {
     }
   };
 
+  // Show loading state while app initialises
   if (isLoading) {
     return (
       <SafeAreaView style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
@@ -118,11 +136,12 @@ export default function AddHabitScreen() {
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#f9fafb' }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: colours.backgroundLight }}>
       <ScrollView contentContainerStyle={styles.container}>
         <Text style={styles.title}>{isEditing ? 'Edit Habit' : 'Create New Habit'}</Text>
 
-        {/* Form fields */}
+        {/* Reusable FormField component for habit name input */}
+        {/* Pattern from Week 4 tutorial on controlled form inputs */}
         <FormField
           label="Habit Name"
           placeholder="e.g., Morning Run"
@@ -130,6 +149,7 @@ export default function AddHabitScreen() {
           onChangeText={setHabitName}
         />
 
+        {/* Reusable FormField component for description input */}
         <FormField
           label="Description (optional)"
           placeholder="e.g., 30 minutes run"
@@ -138,7 +158,7 @@ export default function AddHabitScreen() {
           multiline
         />
 
-        {/* Category selector */}
+        {/* Category selector - allows user to pick which category this habit belongs to */}
         <View style={styles.categorySection}>
           <Text style={styles.label}>Select Category</Text>
           <View style={styles.categoryGrid}>
@@ -165,7 +185,7 @@ export default function AddHabitScreen() {
           </View>
         </View>
 
-        {/* Save button */}
+        {/* Save button - submits form and saves to database */}
         <TouchableOpacity
           onPress={saveHabit}
           disabled={isSaving}
@@ -174,7 +194,7 @@ export default function AddHabitScreen() {
           <Text style={styles.saveButtonText}>{isSaving ? 'Saving...' : 'Save Habit'}</Text>
         </TouchableOpacity>
 
-        {/* Cancel button */}
+        {/* Cancel button - closes modal without saving */}
         <TouchableOpacity onPress={() => router.back()} style={styles.cancelButton}>
           <Text style={styles.cancelButtonText}>Cancel</Text>
         </TouchableOpacity>
@@ -192,13 +212,13 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '700',
     marginBottom: 24,
-    color: '#1f2937',
+    color: colours.textPrimary,
   },
   label: {
     fontSize: 14,
     fontWeight: '600',
     marginBottom: 12,
-    color: '#333',
+    color: colours.textPrimary,
   },
   categorySection: {
     marginBottom: 24,
@@ -212,7 +232,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#e5e7eb',
+    backgroundColor: colours.backgroundDark,
     borderWidth: 2,
     borderColor: 'transparent',
   },
@@ -221,7 +241,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
   },
   categoryButtonText: {
-    color: '#666',
+    color: colours.textSecondary,
     fontWeight: '500',
     fontSize: 12,
   },
@@ -229,7 +249,7 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   saveButton: {
-    backgroundColor: '#6366f1',
+    backgroundColor: colours.accentBlue,
     paddingVertical: 14,
     borderRadius: 8,
     alignItems: 'center',
@@ -248,7 +268,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   cancelButtonText: {
-    color: '#6b7280',
+    color: colours.textSecondary,
     fontWeight: '600',
     fontSize: 16,
   },

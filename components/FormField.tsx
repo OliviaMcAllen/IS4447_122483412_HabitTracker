@@ -1,7 +1,13 @@
 // Based on Week 3-4 tutorials - Reusable form input component for consistent UI
-// Used across add-habit, categories, and targets screens
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+// Demonstrates component composition and prop drilling patterns
+// Used across add-habit, login, and other screens for consistent styling
+// Week 3 tutorial: React props for passing data and callbacks to components
 
+import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { colours } from '../constants/colours';
+
+// Type definition for FormField component props
+// secureTextEntry prop added for password inputs (Week 4 tutorial on form security)
 type FormFieldProps = {
   label: string;
   placeholder: string;
@@ -9,6 +15,7 @@ type FormFieldProps = {
   onChangeText: (text: string) => void;
   multiline?: boolean;
   keyboardType?: 'default' | 'numeric' | 'email-address' | 'phone-pad';
+  secureTextEntry?: boolean; // New prop for password fields
 };
 
 export default function FormField({
@@ -18,10 +25,12 @@ export default function FormField({
   onChangeText,
   multiline = false,
   keyboardType = 'default',
+  secureTextEntry = false,
 }: FormFieldProps) {
   return (
     <View style={styles.container}>
       <Text style={styles.label}>{label}</Text>
+      {/* TextInput component - controlled input pattern from Week 4 tutorial */}
       <TextInput
         style={[styles.input, multiline && styles.multilineInput]}
         placeholder={placeholder}
@@ -29,7 +38,8 @@ export default function FormField({
         onChangeText={onChangeText}
         multiline={multiline}
         keyboardType={keyboardType}
-        placeholderTextColor="#999"
+        secureTextEntry={secureTextEntry} // Hide text for password inputs
+        placeholderTextColor={colours.textSecondary}
       />
     </View>
   );
@@ -43,16 +53,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     marginBottom: 6,
-    color: '#333',
+    color: colours.textPrimary,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: colours.borderColour,
     padding: 12,
     borderRadius: 6,
     fontSize: 14,
-    color: '#000',
-    backgroundColor: '#fff',
+    color: colours.textPrimary,
+    backgroundColor: colours.cardBg,
   },
   multilineInput: {
     minHeight: 100,
