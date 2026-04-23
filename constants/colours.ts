@@ -1,27 +1,33 @@
 // Colour palette for Tide app
-// Warm sand and ocean blue professional theme
+// Based on Week 4 design principles for consistent UI styling and visual hierarchy
+// Centralised colour system ensures consistency across all screens
 
 export const colours = {
-  // Backgrounds
-  backgroundLight: '#F5F1E8',  // Warm sand
-  backgroundDark: '#E8DCC8',   // Darker sand
+  // Background colours used for main app screens
+  // Week 4: using soft tones to create a clean and readable interface
+  backgroundLight: '#F5F1E8',
+  backgroundDark: '#E8DCC8',
   
-  // Text
-  textPrimary: '#2C2C2C',      // Dark grey
-  textSecondary: '#6B7280',    // Medium grey
+  // Text colours for readability and hierarchy
+  // Primary used for headings, secondary for supporting text
+  textPrimary: '#2C2C2C',
+  textSecondary: '#6B7280',
   
-  // Accents (ocean blue)
-  accentBlue: '#0066CC',       // Ocean blue
-  accentGreen: '#059669',      // Muted green (for completion)
-  accentRed: '#DC2626',        // Muted red
+  // Accent colours used for actions and highlights
+  // Week 4: consistent accent colour improves user recognition of actions
+  accentBlue: '#0066CC',
+  accentGreen: '#059669',
+  accentRed: '#DC2626',
   
-  // UI Elements
-  borderColour: '#D4C4B0',     // Sandy border
-  cardBg: '#FFFFFF',           // White cards
+  // UI element colours used across components
+  // Includes borders and card backgrounds for layout structure
+  borderColour: '#D4C4B0',
+  cardBg: '#FFFFFF',
   
-  // Category colours (warm tones)
-  catFitness: '#E74C3C',       // Warm red
-  catLearning: '#3498DB',      // Ocean blue
-  catHealth: '#27AE60',        // Teal green
-  catProductivity: '#F39C12',  // Warm orange
+  // Category colours used to visually distinguish habit categories
+  // Week 4: colour coding supports quick recognition and filtering
+  catFitness: '#E74C3C',
+  catLearning: '#3498DB',
+  catHealth: '#27AE60',
+  catProductivity: '#F39C12',
 };

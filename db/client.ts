@@ -1,15 +1,16 @@
-// Based on Week 11 Drizzle ORM tutorial
-// Database client setup for Expo SQLite
-// Week 11 tutorial: Setting up database connection and initialising tables
+// Database client setup
+// Based on Week 11 Drizzle ORM tutorial for SQLite integration
+// Handles database connection and table creation for the app
+
 import { drizzle } from 'drizzle-orm/expo-sqlite';
 import { openDatabaseSync } from 'expo-sqlite';
 
-// Open the SQLite database
-// Pattern from Week 11 tutorial - openDatabaseSync creates or opens existing database
+// Open or create the SQLite database
+// Week 11: openDatabaseSync ensures the database is available before queries run
 const sqlite = openDatabaseSync('habits_final.db');
 
-// Create tables if they don't exist
-// Uses SQL CREATE TABLE IF NOT EXISTS pattern to safely initialise database schema
+// Create users table
+// Week 11: CREATE TABLE IF NOT EXISTS prevents errors if table already exists
 sqlite.execSync(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -20,6 +21,7 @@ sqlite.execSync(`
   );
 `);
 
+// Create categories table for organising habits
 sqlite.execSync(`
   CREATE TABLE IF NOT EXISTS categories (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -29,6 +31,8 @@ sqlite.execSync(`
   );
 `);
 
+// Create habits table which stores main habit data
+// categoryId links each habit to a category
 sqlite.execSync(`
   CREATE TABLE IF NOT EXISTS habits (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -39,6 +43,8 @@ sqlite.execSync(`
   );
 `);
 
+// Create habit_logs table to track daily completion
+// Each entry records a habit, date, and completion count
 sqlite.execSync(`
   CREATE TABLE IF NOT EXISTS habit_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,6 +55,8 @@ sqlite.execSync(`
   );
 `);
 
+// Create targets table for storing user goals
+// period defines whether the target is daily, weekly, etc.
 sqlite.execSync(`
   CREATE TABLE IF NOT EXISTS targets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -58,6 +66,6 @@ sqlite.execSync(`
   );
 `);
 
-// Export the database instance to use in other files
-// Pattern from Week 11 tutorial - drizzle wraps SQLite for ORM functionality
+// Export database instance
+// Week 11: drizzle wraps the SQLite database to allow ORM-style queries
 export const db = drizzle(sqlite);

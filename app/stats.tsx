@@ -1,9 +1,8 @@
-// Based on Week 8-9 tutorials - Statistics and insights screen
-// Week 3: useState + useFocusEffect for reactive UI updates
-// Week 8: Context API for global auth state
-// Week 11: Drizzle ORM for querying and aggregating SQLite data
+// Stats screen
+// Based on Week 3 (state and reactive updates), Week 4 (layout and visual hierarchy),
+// Week 8 (Context API usage), and Week 11 (data aggregation with Drizzle ORM)
 
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useContext, useState } from 'react';
 import {
   Dimensions,
@@ -20,9 +19,10 @@ import { db } from '../db/client';
 import { habitLogs, habits as habitsTable, targets as targetsTable } from '../db/schema';
 import { AuthContext } from './_layout';
 
+// Get screen width for chart sizing
 const screenWidth = Dimensions.get('window').width;
 
-// Week 3: structured types for predictable state
+// Type for habit statistics
 type HabitStat = {
   id: number;
   habitName: string;
@@ -31,6 +31,7 @@ type HabitStat = {
   streak: number;
 };
 
+// Type for target progress tracking
 type TargetProgress = {
   habitName: string;
   targetValue: number;
@@ -41,25 +42,29 @@ type TargetProgress = {
 
 export default function StatsScreen() {
   const { isLoading } = useContext(AuthContext);
+  const router = useRouter();
 
+  // Week 3: state to store calculated statistics
   const [habitStats, setHabitStats] = useState<HabitStat[]>([]);
   const [targetProgress, setTargetProgress] = useState<TargetProgress[]>([]);
   const [selectedPeriod, setSelectedPeriod] = useState<'week' | 'month'>('week');
 
-  // Week 11: reload data when navigating back to screen
+  // Week 3: reload data whenever screen comes into focus
   useFocusEffect(
     useCallback(() => {
       loadStatistics();
     }, [])
   );
 
+  // Helper function to get a date range for filtering logs
   const getDateRange = (days: number) => {
     const start = new Date();
     start.setDate(start.getDate() - days);
     return start;
   };
 
-  // Week 11: calculate streak (consecutive days logic)
+  // Function to calculate streak of consecutive days
+  // Loops backwards from today and counts continuous logs
   const calculateStreak = (logs: any[]) => {
     let streak = 0;
     const today = new Date();
@@ -71,18 +76,18 @@ export default function StatsScreen() {
 
       if (logs.some((log) => log.date === dateStr)) {
         streak++;
-      } else if (i > 0) {
-        break;
-      }
+      } else if (i > 0) break;
     }
     return streak;
   };
 
-  // Week 11: data aggregation using Drizzle ORM
+  // Week 11: load and aggregate data from database
   const loadStatistics = async () => {
+    // Fetch all habits and logs
     const allHabits = await db.select().from(habitsTable);
     const allLogs = await db.select().from(habitLogs);
 
+    // Build statistics per habit
     const stats = allHabits.map((habit: any) => {
       const logs = allLogs.filter((log: any) => log.habitId === habit.id);
 
@@ -101,8 +106,10 @@ export default function StatsScreen() {
 
     setHabitStats(stats);
 
+    // Fetch targets for progress tracking
     const allTargets = await db.select().from(targetsTable);
 
+    // Calculate progress towards targets
     const progress = allTargets.map((target: any) => {
       const habit = allHabits.find((h: any) => h.id === target.habitId);
       const logs = allLogs.filter((log: any) => log.habitId === target.habitId);
@@ -122,9 +129,10 @@ export default function StatsScreen() {
     setTargetProgress(progress);
   };
 
+  // Prevent rendering until data is ready
   if (isLoading) return null;
 
-  // Chart data (typed for stability)
+  // Prepare data for chart component
   const chartData = {
     labels: habitStats.map((h) => h.habitName.slice(0, 6)),
     datasets: [
@@ -142,13 +150,18 @@ export default function StatsScreen() {
     <SafeAreaView style={styles.screen}>
       <ScrollView contentContainerStyle={styles.container}>
 
-        {/* Header */}
+        {/* Back navigation */}
+        <TouchableOpacity onPress={() => router.back()}>
+          <Text style={styles.back}>← Back</Text>
+        </TouchableOpacity>
+
+        {/* Header section */}
         <View style={styles.header}>
           <Text style={styles.title}>Insights</Text>
           <Text style={styles.subtitle}>Your Daily Rhythm</Text>
         </View>
 
-        {/* Period Selector */}
+        {/* Toggle between weekly and monthly view */}
         <View style={styles.periodSelector}>
           {(['week', 'month'] as const).map((period) => (
             <TouchableOpacity
@@ -156,13 +169,13 @@ export default function StatsScreen() {
               onPress={() => setSelectedPeriod(period)}
               style={[
                 styles.periodButton,
-                selectedPeriod === period && styles.periodButtonActive,
+                selectedPeriod === period && styles.periodActive,
               ]}
             >
               <Text
                 style={[
-                  styles.periodButtonText,
-                  selectedPeriod === period && styles.periodButtonTextActive,
+                  styles.periodText,
+                  selectedPeriod === period && styles.periodTextActive,
                 ]}
               >
                 {period === 'week' ? 'Week' : 'Month'}
@@ -171,12 +184,12 @@ export default function StatsScreen() {
           ))}
         </View>
 
-        {/* Chart */}
+        {/* Activity chart */}
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Activity</Text>
 
           {habitStats.length === 0 ? (
-            <Text style={styles.emptyText}>No data available</Text>
+            <Text style={styles.empty}>No data available</Text>
           ) : (
             <BarChart
               {...({
@@ -192,24 +205,27 @@ export default function StatsScreen() {
                   color: (opacity = 1) => `rgba(0,102,204,${opacity})`,
                   labelColor: () => '#6B7280',
                 },
+                style: {
+                  borderRadius: 10,
+                },
               } as any)}
             />
           )}
         </View>
 
-        {/* Streaks */}
+        {/* Streak display */}
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Streaks</Text>
 
           {habitStats.map((stat) => (
             <View key={stat.id} style={styles.row}>
               <Text style={styles.label}>{stat.habitName}</Text>
-              <Text style={styles.value}>{stat.streak} days</Text>
+              <Text style={styles.streak}>{stat.streak} days</Text>
             </View>
           ))}
         </View>
 
-        {/* Targets */}
+        {/* Target progress display */}
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Targets</Text>
 
@@ -238,97 +254,115 @@ export default function StatsScreen() {
   );
 }
 
-// Week 4: UI consistency, spacing system, hierarchy
+// Styling based on Week 4 layout principles
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#F8F6F1',
+    backgroundColor: '#F4F6FA',
   },
   container: {
     padding: 16,
     paddingBottom: 40,
   },
+
+  back: {
+    fontSize: 13,
+    color: '#6B7280',
+    marginBottom: 10,
+  },
+
   header: {
-    marginBottom: 20,
+    marginBottom: 18,
   },
   title: {
-    fontSize: 26,
+    fontSize: 28,
     fontWeight: '800',
-    color: '#1F2937',
+    color: '#111827',
   },
   subtitle: {
     fontSize: 13,
     color: '#6B7280',
-    marginTop: 2,
   },
+
   periodSelector: {
     flexDirection: 'row',
-    marginBottom: 16,
     gap: 8,
+    marginBottom: 16,
   },
   periodButton: {
     flex: 1,
     paddingVertical: 10,
-    borderRadius: 6,
+    borderRadius: 8,
     backgroundColor: '#E5E7EB',
     alignItems: 'center',
   },
-  periodButtonActive: {
+  periodActive: {
     backgroundColor: colours.accentBlue,
   },
-  periodButtonText: {
+  periodText: {
     fontSize: 13,
     color: '#6B7280',
     fontWeight: '600',
   },
-  periodButtonTextActive: {
+  periodTextActive: {
     color: '#fff',
   },
+
   card: {
     backgroundColor: '#fff',
     padding: 14,
-    borderRadius: 8,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: '#E5E7EB',
     marginBottom: 16,
   },
+
   sectionTitle: {
-    fontSize: 14,
     fontWeight: '700',
     marginBottom: 10,
+    color: '#111827',
   },
+
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: 10,
   },
+
   label: {
     fontSize: 13,
     color: '#1F2937',
   },
-  value: {
+
+  streak: {
     fontWeight: '700',
-    color: colours.accentBlue,
+    color: '#F59E0B',
   },
+
   targetItem: {
     marginBottom: 12,
   },
+
   progressBar: {
     height: 6,
     backgroundColor: '#E5E7EB',
+    borderRadius: 3,
     marginTop: 4,
   },
+
   progressFill: {
     height: '100%',
     backgroundColor: colours.accentBlue,
+    borderRadius: 3,
   },
+
   subText: {
     fontSize: 12,
     color: '#6B7280',
     marginTop: 4,
   },
-  emptyText: {
+
+  empty: {
     color: '#6B7280',
-    fontSize: 13,
   },
 });

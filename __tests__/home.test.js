@@ -1,3 +1,8 @@
+// Home screen test
+// Based on React Native Testing Library and Jest mocking tutorials
+// This test checks that the Home screen renders correctly with context and mocked navigation
+
+// Mock Expo Router to avoid real navigation during tests
 jest.mock('expo-router', () => ({
   useRouter: () => ({
     push: jest.fn(),
@@ -10,6 +15,7 @@ import { AuthContext } from '../app/_layout';
 import HomeScreen from '../app/index';
 
 test('home renders title', () => {
+  // Wrap component in AuthContext to provide required global state
   const { getByText } = render(
     <AuthContext.Provider
       value={{
@@ -23,5 +29,6 @@ test('home renders title', () => {
     </AuthContext.Provider>
   );
 
+  // Check that the main title is rendered on screen
   expect(getByText('Tide')).toBeTruthy();
 });

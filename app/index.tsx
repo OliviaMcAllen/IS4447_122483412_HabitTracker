@@ -1,8 +1,8 @@
-// Based on Week 4 tutorial - Home screen with habit management
-// Week 3: useState + useFocusEffect for dynamic UI updates
-// Week 8: AuthContext for global authentication state
-// Week 11: Drizzle ORM for database reads/writes
-// Added: Category filter (Search & Filter requirement)
+// Home screen
+// Week 3: state and re-rendering
+// Week 4: layout and UI structure
+// Week 8: Context API
+// Week 11: Drizzle ORM
 
 import { eq } from 'drizzle-orm';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -13,12 +13,17 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { colours } from '../constants/colours';
 import { db } from '../db/client';
-import { categories as categoriesTable, habitLogs, habits as habitsTable } from '../db/schema';
+import {
+  categories as categoriesTable,
+  habitLogs,
+  habits as habitsTable,
+} from '../db/schema';
 import { AuthContext } from './_layout';
 
 type Habit = {
@@ -46,9 +51,8 @@ export default function HomeScreen() {
   const [habitList, setHabitList] = useState<HabitWithCompletion[]>([]);
   const [categoryList, setCategoryList] = useState<Category[]>([]);
   const [completedCount, setCompletedCount] = useState(0);
-
-  // ✅ NEW: category filter state
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
+  const [search, setSearch] = useState('');
 
   const getTodayDate = () => new Date().toISOString().split('T')[0];
 
@@ -73,32 +77,35 @@ export default function HomeScreen() {
         ),
       }));
 
-      setHabitList(habitsWithCompletion as HabitWithCompletion[]);
-      setCategoryList(categoriesResult as Category[]);
+      setHabitList(habitsWithCompletion);
+      setCategoryList(categoriesResult);
 
-      const completed = habitsWithCompletion.filter((h: any) => h.completedToday).length;
+      const completed = habitsWithCompletion.filter(
+        (h: any) => h.completedToday
+      ).length;
       setCompletedCount(completed);
     } catch {
       Alert.alert('Error', 'Failed to load habits');
     }
   };
 
-  const toggleHabitCompletion = async (habitId: number, completedToday: boolean) => {
+  const toggleHabitCompletion = async (
+    habitId: number,
+    completedToday: boolean
+  ) => {
     try {
       const today = getTodayDate();
 
       if (completedToday) {
-        const logsToDelete = await db
+        const logs = await db
           .select()
           .from(habitLogs)
           .where(eq(habitLogs.habitId, habitId));
 
-        const logToDelete = logsToDelete.find(
-          (log: any) => log.date === today && log.habitId === habitId
-        );
+        const log = logs.find((l: any) => l.date === today);
 
-        if (logToDelete) {
-          await db.delete(habitLogs).where(eq(habitLogs.id, logToDelete.id));
+        if (log) {
+          await db.delete(habitLogs).where(eq(habitLogs.id, log.id));
         }
       } else {
         await db.insert(habitLogs).values({
@@ -120,8 +127,12 @@ export default function HomeScreen() {
       {
         text: 'Delete',
         onPress: async () => {
-          await db.delete(habitLogs).where(eq(habitLogs.habitId, habitId));
-          await db.delete(habitsTable).where(eq(habitsTable.id, habitId));
+          await db
+            .delete(habitLogs)
+            .where(eq(habitLogs.habitId, habitId));
+          await db
+            .delete(habitsTable)
+            .where(eq(habitsTable.id, habitId));
           await loadData();
         },
       },
@@ -135,13 +146,18 @@ export default function HomeScreen() {
     categoryList.find((c) => c.id === id)?.colour || '#999';
 
   const progressPercentage =
-    habitList.length > 0 ? (completedCount / habitList.length) * 100 : 0;
+    habitList.length > 0
+      ? (completedCount / habitList.length) * 100
+      : 0;
 
-  // ✅ APPLY FILTER
-  const filteredHabits =
-    selectedCategory === null
-      ? habitList
-      : habitList.filter((h) => h.categoryId === selectedCategory);
+  const filteredHabits = habitList
+    .filter(
+      (h) =>
+        selectedCategory === null || h.categoryId === selectedCategory
+    )
+    .filter((h) =>
+      h.name.toLowerCase().includes(search.toLowerCase())
+    );
 
   if (isLoading) {
     return (
@@ -155,6 +171,7 @@ export default function HomeScreen() {
     <SafeAreaView style={styles.screen}>
       <ScrollView contentContainerStyle={styles.container}>
 
+        {/* Header */}
         <View style={styles.header}>
           <Text style={styles.title}>Tide</Text>
           <Text style={styles.subtitle}>Your Daily Rhythm</Text>
@@ -162,37 +179,84 @@ export default function HomeScreen() {
 
         {/* Navigation */}
         <View style={styles.navRow}>
-          <TouchableOpacity onPress={() => router.push('/stats')} style={styles.navPrimary}>
-            <Text style={styles.navPrimaryText}>Statistics</Text>
+          <TouchableOpacity
+            onPress={() => router.push('/stats')}
+            style={styles.navSecondary}
+          >
+            <Text style={styles.navSecondaryText}>Statistics</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={() => router.push('/settings')} style={styles.navSecondary}>
+          <TouchableOpacity
+            onPress={() => router.push('/settings')}
+            style={styles.navSecondary}
+          >
             <Text style={styles.navSecondaryText}>Settings</Text>
           </TouchableOpacity>
         </View>
 
-        {/* ✅ FILTER UI */}
-        <View style={styles.filterRow}>
+        {/* Search */}
+        <TextInput
+          placeholder="Search habits..."
+          value={search}
+          onChangeText={setSearch}
+          style={styles.search}
+        />
+
+        {/* Category filter */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.filterScroll}
+        >
           <TouchableOpacity
             onPress={() => setSelectedCategory(null)}
-            style={[styles.filterButton, selectedCategory === null && styles.filterActive]}
+            style={[
+              styles.filterChip,
+              selectedCategory === null && styles.filterAllActive,
+            ]}
           >
-            <Text style={styles.filterText}>All</Text>
-          </TouchableOpacity>
-
-          {categoryList.map((cat) => (
-            <TouchableOpacity
-              key={cat.id}
-              onPress={() => setSelectedCategory(cat.id)}
+            <Text
               style={[
-                styles.filterButton,
-                selectedCategory === cat.id && styles.filterActive,
+                styles.filterText,
+                selectedCategory === null && styles.filterTextActive,
               ]}
             >
-              <Text style={styles.filterText}>{cat.name}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+              All
+            </Text>
+          </TouchableOpacity>
+
+          {categoryList.map((cat) => {
+            const isActive = selectedCategory === cat.id;
+
+            return (
+              <TouchableOpacity
+                key={cat.id}
+                onPress={() => setSelectedCategory(cat.id)}
+                style={[
+                  styles.filterChip,
+                  {
+                    backgroundColor: isActive
+                      ? cat.colour
+                      : `${cat.colour}20`,
+                    borderColor: cat.colour,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.filterText,
+                    {
+                      color: isActive ? '#fff' : cat.colour,
+                      fontWeight: isActive ? '700' : '600',
+                    },
+                  ]}
+                >
+                  {cat.name}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
 
         {/* Progress */}
         <View style={styles.card}>
@@ -204,24 +268,38 @@ export default function HomeScreen() {
           </View>
 
           <View style={styles.progressBar}>
-            <View style={[styles.progressFill, { width: `${progressPercentage}%` }]} />
+            <View
+              style={[
+                styles.progressFill,
+                { width: `${progressPercentage}%` },
+              ]}
+            />
           </View>
         </View>
 
-        {/* Habit List */}
+        {/* Habit list */}
         {filteredHabits.length === 0 ? (
-          <Text style={styles.emptyText}>No habits in this category</Text>
+          <Text style={styles.emptyText}>No habits found</Text>
         ) : (
           filteredHabits.map((habit) => (
             <View
               key={habit.id}
               style={[
                 styles.habitCard,
-                { borderLeftColor: getCategoryColour(habit.categoryId) },
+                {
+                  borderLeftColor: getCategoryColour(
+                    habit.categoryId
+                  ),
+                },
               ]}
             >
               <TouchableOpacity
-                onPress={() => toggleHabitCompletion(habit.id, habit.completedToday)}
+                onPress={() =>
+                  toggleHabitCompletion(
+                    habit.id,
+                    habit.completedToday
+                  )
+                }
                 style={[
                   styles.checkbox,
                   habit.completedToday && styles.checkboxChecked,
@@ -235,18 +313,33 @@ export default function HomeScreen() {
                 </Text>
               </View>
 
-              <TouchableOpacity onPress={() => deleteHabit(habit.id)}>
-                <Text style={styles.deleteText}>Remove</Text>
-              </TouchableOpacity>
+              <View style={styles.actions}>
+                <TouchableOpacity
+                  onPress={() =>
+                    router.push(`/add-habit?id=${habit.id}`)
+                  }
+                >
+                  <Text style={styles.editText}>Edit</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => deleteHabit(habit.id)}
+                >
+                  <Text style={styles.deleteText}>Remove</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           ))
         )}
 
+        {/* Add button */}
         <TouchableOpacity
           onPress={() => router.push('/add-habit')}
           style={styles.primaryButton}
         >
-          <Text style={styles.primaryButtonText}>Add Habit</Text>
+          <Text style={styles.primaryButtonText}>
+            Add Habit
+          </Text>
         </TouchableOpacity>
 
       </ScrollView>
@@ -255,49 +348,28 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: '#F8F6F1',
-  },
-  container: {
-    padding: 16,
-    paddingBottom: 40,
-  },
-  header: {
-    marginBottom: 14,
-  },
+  screen: { flex: 1, backgroundColor: '#F8F6F1' },
+  container: { padding: 16, paddingBottom: 40 },
+
+  header: { marginBottom: 18 },
   title: {
-    fontSize: 26,
-    fontWeight: '800',
-    color: '#1F2937',
+    fontSize: 36,
+    fontWeight: '900',
+    letterSpacing: -1,
+    color: '#111827',
   },
   subtitle: {
-    fontSize: 13,
+    fontSize: 14,
     color: '#6B7280',
+    marginTop: 6,
   },
 
-  navRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 18,
-  },
-  navPrimary: {
-    flex: 1,
-    backgroundColor: colours.accentBlue,
-    paddingVertical: 10,
-    borderRadius: 6,
-    alignItems: 'center',
-  },
-  navPrimaryText: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 13,
-  },
+  navRow: { flexDirection: 'row', gap: 10, marginBottom: 18 },
   navSecondary: {
     flex: 1,
     backgroundColor: '#fff',
-    paddingVertical: 10,
-    borderRadius: 6,
+    paddingVertical: 12,
+    borderRadius: 10,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#E5E7EB',
@@ -305,68 +377,54 @@ const styles = StyleSheet.create({
   navSecondaryText: {
     color: '#374151',
     fontWeight: '600',
-    fontSize: 13,
   },
 
-  /* FILTER */
-  filterRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 16,
-  },
-  filterButton: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    backgroundColor: '#E5E7EB',
+  search: {
+    backgroundColor: '#fff',
+    padding: 10,
     borderRadius: 6,
+    marginBottom: 12,
   },
-  filterActive: {
-    backgroundColor: colours.accentBlue,
+
+  filterScroll: { marginBottom: 16 },
+  filterChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginRight: 8,
+    borderWidth: 1,
   },
-  filterText: {
-    fontSize: 12,
-    color: '#1F2937',
-    fontWeight: '500',
-  },
+  filterAllActive: { backgroundColor: colours.accentBlue },
+  filterText: { fontSize: 12 },
+  filterTextActive: { color: '#fff' },
 
   card: {
     backgroundColor: '#fff',
     padding: 14,
-    borderRadius: 8,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: '#E5E7EB',
     marginBottom: 20,
   },
 
-  progressRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  progressLabel: {
-    fontSize: 13,
-    color: '#6B7280',
-  },
-  progressValue: {
-    fontWeight: '700',
-  },
+  progressRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  progressLabel: { fontSize: 13, color: '#6B7280' },
+  progressValue: { fontWeight: '700' },
+
   progressBar: {
     height: 6,
     backgroundColor: '#E5E7EB',
     borderRadius: 3,
+    marginTop: 6,
   },
-  progressFill: {
-    height: '100%',
-    backgroundColor: colours.accentBlue,
-  },
+  progressFill: { height: '100%', backgroundColor: colours.accentBlue },
 
   habitCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#fff',
     padding: 14,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#E5E7EB',
     marginBottom: 10,
@@ -379,28 +437,24 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#9CA3AF',
     marginRight: 12,
+    borderRadius: 4,
   },
   checkboxChecked: {
     backgroundColor: colours.accentBlue,
     borderColor: colours.accentBlue,
   },
 
-  habitInfo: {
-    flex: 1,
-  },
-  habitName: {
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  habitMeta: {
-    fontSize: 12,
-    color: '#6B7280',
-  },
+  habitInfo: { flex: 1 },
+  habitName: { fontWeight: '600', fontSize: 14 },
+  habitMeta: { fontSize: 12, color: '#6B7280' },
 
-  deleteText: {
+  actions: { alignItems: 'flex-end', gap: 6 },
+  editText: {
     fontSize: 12,
-    color: '#DC2626',
+    color: colours.accentBlue,
+    fontWeight: '600',
   },
+  deleteText: { fontSize: 12, color: '#DC2626' },
 
   emptyText: {
     textAlign: 'center',
@@ -411,18 +465,11 @@ const styles = StyleSheet.create({
   primaryButton: {
     backgroundColor: colours.accentBlue,
     paddingVertical: 14,
-    borderRadius: 6,
+    borderRadius: 8,
     alignItems: 'center',
     marginTop: 10,
   },
-  primaryButtonText: {
-    color: '#fff',
-    fontWeight: '700',
-  },
+  primaryButtonText: { color: '#fff', fontWeight: '700' },
 
-  center: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 });

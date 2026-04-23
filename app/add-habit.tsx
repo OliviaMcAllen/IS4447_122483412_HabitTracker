@@ -1,8 +1,6 @@
-// Based on Week 4 tutorial - Form screen (controlled inputs)
-// Week 3: useState/useEffect for managing form state
-// Week 11: Drizzle ORM for CREATE and UPDATE operations
-// Week 8: Context used for global loading state
-// This version improves UI using Week 4 UX principles: hierarchy, spacing, clarity
+// Add Habit screen
+// Based on Week 3 (useState/useEffect), Week 4 (forms and UI layout),
+// Week 8 (Context API), and Week 11 (Drizzle ORM for database operations)
 
 import { eq } from 'drizzle-orm';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -21,6 +19,7 @@ import { db } from '../db/client';
 import { categories as categoriesTable, habits as habitsTable } from '../db/schema';
 import { AuthContext } from './_layout';
 
+// Type definition for categories (used for rendering and state typing)
 type Category = {
   id: number;
   name: string;
@@ -30,10 +29,10 @@ type Category = {
 
 export default function AddHabitScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams();
+  const { id } = useLocalSearchParams(); // used to determine if editing an existing habit
   const { isLoading } = useContext(AuthContext);
 
-  // Week 3: controlled form state
+  // Week 3: controlled form state for inputs
   const [habitName, setHabitName] = useState('');
   const [habitDescription, setHabitDescription] = useState('');
   const [selectedCategory, setSelectedCategory] = useState(1);
@@ -41,23 +40,27 @@ export default function AddHabitScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
 
-  // Week 3: load initial data
+  // Week 3: useEffect used to load initial data when screen opens
+  // Loads categories and checks if editing mode should be enabled
   useEffect(() => {
     loadCategories();
     if (id) loadHabitForEditing(Number(id));
   }, [id]);
 
+  // Loads categories from database (Week 11)
   const loadCategories = async () => {
     const result = await db.select().from(categoriesTable);
     setCategoryList(result as Category[]);
   };
 
+  // Loads an existing habit if editing (Week 11: SELECT with condition)
   const loadHabitForEditing = async (habitId: number) => {
     const result = await db
       .select()
       .from(habitsTable)
       .where(eq(habitsTable.id, habitId));
 
+    // If habit exists, populate form fields
     if (result.length > 0) {
       const habit = result[0];
       setHabitName(habit.name);
@@ -67,8 +70,9 @@ export default function AddHabitScreen() {
     }
   };
 
-  // Week 11: CREATE + UPDATE logic
+  // Week 11: CREATE and UPDATE logic for habits
   const saveHabit = async () => {
+    // Basic validation
     if (!habitName.trim()) {
       Alert.alert('Error', 'Habit name is required');
       return;
@@ -78,6 +82,7 @@ export default function AddHabitScreen() {
 
     try {
       if (isEditing && id) {
+        // UPDATE existing habit
         await db
           .update(habitsTable)
           .set({
@@ -89,6 +94,7 @@ export default function AddHabitScreen() {
 
         Alert.alert('Updated', 'Habit updated successfully');
       } else {
+        // CREATE new habit
         await db.insert(habitsTable).values({
           name: habitName,
           description: habitDescription,
@@ -99,6 +105,7 @@ export default function AddHabitScreen() {
         Alert.alert('Created', 'Habit added successfully');
       }
 
+      // Return to previous screen after save
       router.back();
     } catch (error) {
       console.error(error);
@@ -108,13 +115,14 @@ export default function AddHabitScreen() {
     }
   };
 
+  // Prevent rendering while global loading is happening
   if (isLoading) return null;
 
   return (
     <SafeAreaView style={styles.screen}>
       <ScrollView contentContainerStyle={styles.container}>
 
-        {/* Header (Week 4: visual hierarchy) */}
+        {/* Header section (Week 4: visual hierarchy) */}
         <View style={styles.header}>
           <Text style={styles.title}>
             {isEditing ? 'Edit Habit' : 'New Habit'}
@@ -124,7 +132,7 @@ export default function AddHabitScreen() {
           </Text>
         </View>
 
-        {/* Form Section */}
+        {/* Form inputs using reusable FormField component */}
         <View style={styles.card}>
           <FormField
             label="Habit Name"
@@ -142,10 +150,11 @@ export default function AddHabitScreen() {
           />
         </View>
 
-        {/* Category Selector (Improved UI) */}
+        {/* Category selection section */}
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Category</Text>
 
+          {/* Displays categories from database */}
           <View style={styles.categoryGrid}>
             {categoryList.map((cat) => (
               <TouchableOpacity
@@ -156,6 +165,7 @@ export default function AddHabitScreen() {
                   selectedCategory === cat.id && styles.categoryItemActive,
                 ]}
               >
+                {/* Colour indicator for category */}
                 <View
                   style={[
                     styles.categoryDot,
@@ -175,7 +185,7 @@ export default function AddHabitScreen() {
           </View>
         </View>
 
-        {/* Actions */}
+        {/* Action buttons */}
         <View style={styles.actions}>
           <TouchableOpacity
             onPress={saveHabit}
@@ -187,6 +197,7 @@ export default function AddHabitScreen() {
             </Text>
           </TouchableOpacity>
 
+          {/* Cancel button returns to previous screen */}
           <TouchableOpacity onPress={() => router.back()}>
             <Text style={styles.secondaryText}>Cancel</Text>
           </TouchableOpacity>
@@ -197,7 +208,7 @@ export default function AddHabitScreen() {
   );
 }
 
-// Week 4: spacing + consistency = better UX
+// Week 4: styling focused on spacing, clarity and consistent layout
 const styles = StyleSheet.create({
   screen: {
     flex: 1,

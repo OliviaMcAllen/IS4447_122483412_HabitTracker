@@ -1,7 +1,6 @@
-// Login screen - Clean centred UI
-// Week 3: useState for form handling
-// Week 8: AuthContext for global state
-// Week 11: Drizzle ORM for database queries
+// Login screen
+// Based on Week 3 (useState for form handling), Week 4 (layout and UI structure),
+// Week 8 (Context API for authentication), and Week 11 (Drizzle ORM for database queries)
 
 import { useRouter } from 'expo-router';
 import { useContext, useEffect, useState } from 'react';
@@ -21,24 +20,28 @@ import { AuthContext } from './_layout';
 
 export default function LoginScreen() {
   const router = useRouter();
+
+  // Week 8: access global auth state and setter
   const { setUser, user } = useContext(AuthContext);
 
-  // Week 8: Redirect if already logged in
+  // Week 8: if a user is already logged in, redirect to home screen
   useEffect(() => {
     if (user) {
       router.replace('/');
     }
   }, [user]);
 
-  // Week 3: Form state
+  // Week 3: controlled form state for inputs
   const [isRegistering, setIsRegistering] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // LOGIN
+  // Login function
+  // Week 11: reads from database and checks if user exists
   const handleLogin = async () => {
+    // Basic validation
     if (!email.trim() || !password.trim()) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
@@ -47,13 +50,16 @@ export default function LoginScreen() {
     setIsLoading(true);
 
     try {
+      // Fetch all users from database
       const result = await db.select().from(users);
 
+      // Find matching user
       const foundUser = result.find(
         (u: any) => u.email === email && u.password === password
       );
 
       if (foundUser) {
+        // Set global user state
         setUser(foundUser);
       } else {
         Alert.alert('Error', 'Invalid email or password');
@@ -65,8 +71,10 @@ export default function LoginScreen() {
     }
   };
 
-  // REGISTER
+  // Register function
+  // Week 11: inserts new user into database
   const handleRegister = async () => {
+    // Validation for all fields
     if (!email.trim() || !password.trim() || !name.trim()) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
@@ -75,6 +83,7 @@ export default function LoginScreen() {
     setIsLoading(true);
 
     try {
+      // Check if email already exists
       const result = await db.select().from(users);
       const exists = result.find((u: any) => u.email === email);
 
@@ -83,6 +92,7 @@ export default function LoginScreen() {
         return;
       }
 
+      // Insert new user
       await db.insert(users).values({
         email,
         password,
@@ -90,6 +100,7 @@ export default function LoginScreen() {
         createdAt: new Date().toISOString(),
       });
 
+      // Reset form and switch back to login
       Alert.alert('Success', 'Account created');
       setIsRegistering(false);
       setEmail('');
@@ -106,14 +117,16 @@ export default function LoginScreen() {
     <SafeAreaView style={styles.screen}>
       <View style={styles.container}>
 
-        {/* Branding - centred (Week 4 UX hierarchy) */}
+        {/* Header section showing app name */}
         <View style={styles.header}>
           <Text style={styles.title}>Tide</Text>
           <Text style={styles.subtitle}>Your Daily Rhythm</Text>
         </View>
 
-        {/* Form */}
+        {/* Form section */}
         <View style={styles.form}>
+
+          {/* Only show name field when registering */}
           {isRegistering && (
             <FormField
               label="Full Name"
@@ -123,6 +136,7 @@ export default function LoginScreen() {
             />
           )}
 
+          {/* Email input */}
           <FormField
             label="Email"
             placeholder="Enter your email"
@@ -130,6 +144,7 @@ export default function LoginScreen() {
             onChangeText={setEmail}
           />
 
+          {/* Password input */}
           <FormField
             label="Password"
             placeholder="Enter password"
@@ -138,7 +153,7 @@ export default function LoginScreen() {
             secureTextEntry
           />
 
-          {/* Primary Button */}
+          {/* Submit button switches between login and register */}
           <TouchableOpacity
             onPress={isRegistering ? handleRegister : handleLogin}
             style={styles.button}
@@ -152,7 +167,7 @@ export default function LoginScreen() {
             </Text>
           </TouchableOpacity>
 
-          {/* Toggle */}
+          {/* Toggle between login and register modes */}
           <TouchableOpacity
             onPress={() => {
               setIsRegistering(!isRegistering);
@@ -174,7 +189,7 @@ export default function LoginScreen() {
   );
 }
 
-// Styling (Week 4: clean spacing + alignment)
+// Styling section based on Week 4 layout principles
 const styles = StyleSheet.create({
   screen: {
     flex: 1,

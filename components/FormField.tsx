@@ -1,13 +1,13 @@
-// Based on Week 3-4 tutorials - Reusable form input component for consistent UI
-// Demonstrates component composition and prop drilling patterns
-// Used across add-habit, login, and other screens for consistent styling
-// Week 3 tutorial: React props for passing data and callbacks to components
+// Reusable FormField component
+// Based on Week 3 and Week 4 tutorials on reusable components,
+// props, controlled inputs, and consistent form design
 
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { colours } from '../constants/colours';
 
-// Type definition for FormField component props
-// secureTextEntry prop added for password inputs (Week 4 tutorial on form security)
+// Type definition for FormField props
+// Week 3: props used to pass values and callbacks into reusable components
+// Week 4: secureTextEntry supports password input fields
 type FormFieldProps = {
   label: string;
   placeholder: string;
@@ -15,7 +15,7 @@ type FormFieldProps = {
   onChangeText: (text: string) => void;
   multiline?: boolean;
   keyboardType?: 'default' | 'numeric' | 'email-address' | 'phone-pad';
-  secureTextEntry?: boolean; // New prop for password fields
+  secureTextEntry?: boolean;
 };
 
 export default function FormField({
@@ -29,8 +29,10 @@ export default function FormField({
 }: FormFieldProps) {
   return (
     <View style={styles.container}>
+      {/* Label shown above input field */}
       <Text style={styles.label}>{label}</Text>
-      {/* TextInput component - controlled input pattern from Week 4 tutorial */}
+
+      {/* TextInput uses controlled input pattern from Week 4 */}
       <TextInput
         style={[styles.input, multiline && styles.multilineInput]}
         placeholder={placeholder}
@@ -38,13 +40,15 @@ export default function FormField({
         onChangeText={onChangeText}
         multiline={multiline}
         keyboardType={keyboardType}
-        secureTextEntry={secureTextEntry} // Hide text for password inputs
+        secureTextEntry={secureTextEntry}
         placeholderTextColor={colours.textSecondary}
       />
     </View>
   );
 }
 
+// Styling focused on consistency across screens
+// Week 4: spacing, alignment and readable form layout
 const styles = StyleSheet.create({
   container: {
     marginBottom: 16,

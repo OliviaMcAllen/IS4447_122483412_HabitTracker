@@ -1,20 +1,19 @@
+// Database schema definitions
+// Based on Week 11 Drizzle ORM tutorial
+// This file defines the structure of all tables used in the app
+
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
-// Based on Week 11 tutorial - User authentication table
-// Stores user account information for login/logout functionality
+// Users table - stores login and account information
 export const users = sqliteTable('users', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   email: text('email').notNull().unique(),
-  password: text('password').notNull(), // In production, this would be hashed
+  password: text('password').notNull(),
   name: text('name').notNull(),
   createdAt: text('createdAt').notNull(),
 });
 
-
-// Based on Week 11 Drizzle ORM tutorial
-// Defines the database tables for Habit Tracker
-
-// Habits table - stores the habit definitions
+// Habits table - stores each habit created by the user
 export const habits = sqliteTable('habits', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   name: text('name').notNull(),
@@ -23,7 +22,7 @@ export const habits = sqliteTable('habits', {
   createdAt: text('createdAt').notNull(),
 });
 
-// Habit logs - records when a habit was completed
+// Habit logs - records when a habit is completed
 export const habitLogs = sqliteTable('habit_logs', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   habitId: integer('habitId').notNull(),
@@ -32,7 +31,7 @@ export const habitLogs = sqliteTable('habit_logs', {
   notes: text('notes'),
 });
 
-// Categories - organize habits
+// Categories table - used to group habits and apply colours in the UI
 export const categories = sqliteTable('categories', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   name: text('name').notNull(),
@@ -40,10 +39,10 @@ export const categories = sqliteTable('categories', {
   icon: text('icon'),
 });
 
-// Targets - weekly/monthly goals
+// Targets table - stores goals for habits used in statistics
 export const targets = sqliteTable('targets', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   habitId: integer('habitId').notNull(),
-  period: text('period').notNull(), // 'weekly' or 'monthly'
+  period: text('period').notNull(),
   targetValue: integer('targetValue').notNull(),
 });
