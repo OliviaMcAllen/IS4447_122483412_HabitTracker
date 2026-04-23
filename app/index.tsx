@@ -1,27 +1,26 @@
-// Based on Week 4 tutorial - Home screen with habit management CRUD operations
-// Demonstrates list rendering, state management with useState/useEffect, and database integration
-// Week 11 tutorial pattern: Drizzle ORM for database queries
-// Week 3 tutorial: React hooks (useState, useEffect) for state management
+// Based on Week 4 tutorial - Home screen with habit management
+// Week 3: useState + useFocusEffect for dynamic UI updates
+// Week 8: AuthContext for global authentication state
+// Week 11: Drizzle ORM for database reads/writes
+// UI updated using Week 4 UX principles: hierarchy, spacing, navigation clarity
 
 import { eq } from 'drizzle-orm';
-import { useRouter } from 'expo-router';
-import { useContext, useEffect, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useContext, useState } from 'react';
 import {
   Alert,
   SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
-  View
+  View,
 } from 'react-native';
 import { colours } from '../constants/colours';
 import { db } from '../db/client';
 import { categories as categoriesTable, habitLogs, habits as habitsTable } from '../db/schema';
 import { AuthContext } from './_layout';
 
-// Type definitions for Habit and Category records
 type Habit = {
   id: number;
   name: string;
@@ -34,413 +33,340 @@ type Category = {
   id: number;
   name: string;
   colour: string;
-  icon?: string;
+};
+
+type HabitWithCompletion = Habit & {
+  completedToday: boolean;
 };
 
 export default function HomeScreen() {
-  // Access authentication context to check if user is logged in
   const { isLoading } = useContext(AuthContext);
   const router = useRouter();
-  
-  // State management for habits, categories, search and filtering
-  // Pattern from Week 3 tutorial on useState hook
-  const [habitList, setHabitList] = useState<Habit[]>([]);
+
+  // Week 3: Local state for UI rendering
+  const [habitList, setHabitList] = useState<HabitWithCompletion[]>([]);
   const [categoryList, setCategoryList] = useState<Category[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<number | null>(null);
+  const [completedCount, setCompletedCount] = useState(0);
 
-  // useEffect hook runs once on component mount to load data
-  // Empty dependency array [] means it only runs once (Week 3 tutorial pattern)
-  useEffect(() => {
-    loadData();
-  }, []);
+  const getTodayDate = () => new Date().toISOString().split('T')[0];
 
-  // Load habits and categories from SQLite database
-  // Uses Drizzle ORM pattern from Week 11 tutorial
+  // Week 11: reload data when screen is focused
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [])
+  );
+
   const loadData = async () => {
     try {
       const habitsResult = await db.select().from(habitsTable);
-      setHabitList(habitsResult as Habit[]);
-
       const categoriesResult = await db.select().from(categoriesTable);
+      const logsResult = await db.select().from(habitLogs);
+
+      const today = getTodayDate();
+
+      const habitsWithCompletion = habitsResult.map((habit: any) => ({
+        ...habit,
+        completedToday: logsResult.some(
+          (log: any) => log.habitId === habit.id && log.date === today
+        ),
+      }));
+
+      setHabitList(habitsWithCompletion as HabitWithCompletion[]);
       setCategoryList(categoriesResult as Category[]);
-    } catch (error) {
-      console.error('Error loading data:', error);
+
+      const completed = habitsWithCompletion.filter((h: any) => h.completedToday).length;
+      setCompletedCount(completed);
+    } catch {
       Alert.alert('Error', 'Failed to load habits');
     }
   };
 
-  // Log habit completion by inserting a new record with today's date
-  // Implements CREATE operation from CRUD pattern (Week 4 tutorial)
-  const logHabitCompletion = async (habitId: number) => {
+  // Week 4: CRUD interaction (toggle completion)
+  const toggleHabitCompletion = async (habitId: number, completedToday: boolean) => {
     try {
-      const today = new Date().toISOString().split('T')[0];
-      
-      await db.insert(habitLogs).values({
-        habitId,
-        date: today,
-        count: 1,
-      });
+      const today = getTodayDate();
 
-      Alert.alert('Success', 'Habit logged!');
+      if (completedToday) {
+        const logsToDelete = await db
+          .select()
+          .from(habitLogs)
+          .where(eq(habitLogs.habitId, habitId));
+
+        const logToDelete = logsToDelete.find(
+          (log: any) => log.date === today && log.habitId === habitId
+        );
+
+        if (logToDelete) {
+          await db.delete(habitLogs).where(eq(habitLogs.id, logToDelete.id));
+        }
+      } else {
+        await db.insert(habitLogs).values({
+          habitId,
+          date: today,
+          count: 1,
+        });
+      }
+
       await loadData();
-    } catch (error) {
-      console.error('Error logging habit:', error);
-      Alert.alert('Error', 'Failed to log habit');
+    } catch {
+      Alert.alert('Error', 'Failed to update habit');
     }
   };
 
-  // Delete habit and all associated logs
-  // Implements DELETE operation from CRUD pattern (Week 4 tutorial)
-  // Maintains referential integrity by deleting logs before habit
   const deleteHabit = async (habitId: number) => {
     Alert.alert('Delete Habit', 'Are you sure?', [
-      { text: 'Cancel', onPress: () => {} },
+      { text: 'Cancel' },
       {
         text: 'Delete',
         onPress: async () => {
-          try {
-            // Delete associated logs first to maintain referential integrity
-            await db.delete(habitLogs).where(eq(habitLogs.habitId, habitId));
-            // Then delete the habit
-            await db.delete(habitsTable).where(eq(habitsTable.id, habitId));
-            await loadData();
-            Alert.alert('Success', 'Habit deleted');
-          } catch (error) {
-            console.error('Error deleting habit:', error);
-            Alert.alert('Error', 'Failed to delete habit');
-          }
+          await db.delete(habitLogs).where(eq(habitLogs.habitId, habitId));
+          await db.delete(habitsTable).where(eq(habitsTable.id, habitId));
+          await loadData();
         },
       },
     ]);
   };
 
-  // Filter habits based on search query and selected category
-  // Implements search and filter functionality requirement
-  const filteredHabits = habitList.filter((habit) => {
-    const matchesSearch = habit.name.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = !selectedCategoryFilter || habit.categoryId === selectedCategoryFilter;
-    return matchesSearch && matchesCategory;
-  });
+  const getCategoryName = (id: number) =>
+    categoryList.find((c) => c.id === id)?.name || 'Unknown';
 
-  // Helper function to get category name by ID
-  const getCategoryName = (categoryId: number) => {
-    return categoryList.find((c) => c.id === categoryId)?.name || 'Unknown';
-  };
+  const getCategoryColour = (id: number) =>
+    categoryList.find((c) => c.id === id)?.colour || '#999';
 
-  // Helper function to get category colour by ID for visual distinction
-  const getCategoryColour = (categoryId: number) => {
-    return categoryList.find((c) => c.id === categoryId)?.colour || '#999';
-  };
+  const progressPercentage =
+    habitList.length > 0 ? (completedCount / habitList.length) * 100 : 0;
 
-  // Show loading state while app initialises
   if (isLoading) {
     return (
-      <SafeAreaView style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+      <SafeAreaView style={styles.center}>
         <Text>Loading...</Text>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colours.backgroundLight }}>
+    <SafeAreaView style={styles.screen}>
       <ScrollView contentContainerStyle={styles.container}>
-        
-        {/* Search bar for text-based filtering */}
-        <View style={styles.searchSection}>
-          <TextInput
-            placeholder="Search habits..."
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            style={styles.searchInput}
-          />
+
+        {/* Header (Week 4: visual hierarchy) */}
+        <View style={styles.header}>
+          <Text style={styles.title}>Tide</Text>
+          <Text style={styles.subtitle}>Your Daily Rhythm</Text>
         </View>
 
-        {/* Category filter chips - allows filtering by category */}
-        <View style={styles.filterSection}>
-          <Text style={styles.filterLabel}>FILTER BY CATEGORY</Text>
-          <View style={styles.filterChips}>
+        {/* Navigation buttons (Week 4 UX: quick access) */}
+        <View style={styles.navRow}>
+          <TouchableOpacity
+            onPress={() => router.push('/stats')}
+            style={styles.navPrimary}
+          >
+            <Text style={styles.navPrimaryText}>Statistics</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => router.push('/settings')}
+            style={styles.navSecondary}
+          >
+            <Text style={styles.navSecondaryText}>Settings</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Progress */}
+        <View style={styles.card}>
+          <View style={styles.progressRow}>
+            <Text style={styles.progressLabel}>Progress</Text>
+            <Text style={styles.progressValue}>
+              {completedCount} / {habitList.length}
+            </Text>
+          </View>
+
+          <View style={styles.progressBar}>
+            <View style={[styles.progressFill, { width: `${progressPercentage}%` }]} />
+          </View>
+        </View>
+
+        {/* Habit List */}
+        {habitList.map((habit) => (
+          <View
+            key={habit.id}
+            style={[
+              styles.habitCard,
+              { borderLeftColor: getCategoryColour(habit.categoryId) },
+            ]}
+          >
             <TouchableOpacity
-              onPress={() => setSelectedCategoryFilter(null)}
+              onPress={() => toggleHabitCompletion(habit.id, habit.completedToday)}
               style={[
-                styles.filterChip,
-                !selectedCategoryFilter && styles.filterChipActive,
+                styles.checkbox,
+                habit.completedToday && styles.checkboxChecked,
               ]}
-            >
-              <Text
-                style={[
-                  styles.filterChipText,
-                  !selectedCategoryFilter && styles.filterChipTextActive,
-                ]}
-              >
-                All
+            />
+
+            <View style={styles.habitInfo}>
+              <Text style={styles.habitName}>{habit.name}</Text>
+              <Text style={styles.habitMeta}>
+                {getCategoryName(habit.categoryId)}
               </Text>
-            </TouchableOpacity>
+            </View>
 
-            {categoryList.map((cat) => (
-              <TouchableOpacity
-                key={cat.id}
-                onPress={() => setSelectedCategoryFilter(cat.id)}
-                style={[
-                  styles.filterChip,
-                  selectedCategoryFilter === cat.id && { backgroundColor: cat.colour },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.filterChipText,
-                    selectedCategoryFilter === cat.id && styles.filterChipTextActive,
-                  ]}
-                >
-                  {cat.icon} {cat.name}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        {/* Habits list or empty state */}
-        {filteredHabits.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyStateTitle}>
-              {searchQuery || selectedCategoryFilter ? 'No habits found' : 'No habits yet'}
-            </Text>
-            <Text style={styles.emptyStateText}>
-              {searchQuery || selectedCategoryFilter
-                ? 'Try adjusting your filters'
-                : 'Create your first habit to get started!'}
-            </Text>
-            <TouchableOpacity
-              onPress={() => router.push('/add-habit')}
-              style={styles.emptyStateButton}
-            >
-              <Text style={styles.emptyStateButtonText}>+ Add Habit</Text>
+            <TouchableOpacity onPress={() => deleteHabit(habit.id)}>
+              <Text style={styles.deleteText}>Remove</Text>
             </TouchableOpacity>
           </View>
-        ) : (
-          <View>
-            {filteredHabits.map((habit) => (
-              <View
-                key={habit.id}
-                style={[
-                  styles.habitCard,
-                  { borderLeftColor: getCategoryColour(habit.categoryId) },
-                ]}
-              >
-                <View style={styles.habitHeader}>
-                  <Text style={styles.habitName}>{habit.name}</Text>
-                  <Text style={styles.habitCategory}>
-                    {getCategoryName(habit.categoryId)}
-                  </Text>
-                </View>
+        ))}
 
-                {habit.description && (
-                  <Text style={styles.habitDescription}>{habit.description}</Text>
-                )}
-
-                {/* Action buttons: Log, Edit, Delete */}
-                <View style={styles.buttonGroup}>
-                  <TouchableOpacity
-                    onPress={() => logHabitCompletion(habit.id)}
-                    style={styles.logButton}
-                  >
-                    <Text style={styles.buttonText}>Log</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    onPress={() => router.push(`/add-habit?id=${habit.id}`)}
-                    style={styles.editButton}
-                  >
-                    <Text style={styles.buttonText}>Edit</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    onPress={() => deleteHabit(habit.id)}
-                    style={styles.deleteButton}
-                  >
-                    <Text style={styles.buttonText}>Delete</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))}
-          </View>
-        )}
-
-        {/* Add new habit button */}
+        {/* Primary Action */}
         <TouchableOpacity
           onPress={() => router.push('/add-habit')}
-          style={styles.addButton}
+          style={styles.primaryButton}
         >
-          <Text style={styles.addButtonText}>+ Add New Habit</Text>
+          <Text style={styles.primaryButtonText}>Add Habit</Text>
         </TouchableOpacity>
-        
-        {/* View statistics button */}
-        <TouchableOpacity
-          onPress={() => router.push('/stats')}
-          style={styles.statsButton}
-        >
-          <Text style={styles.statsButtonText}>View Statistics</Text>
-        </TouchableOpacity>
+
       </ScrollView>
     </SafeAreaView>
   );
 }
 
+// Styling (Week 4: spacing, alignment, consistency)
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: '#F8F6F1',
+  },
   container: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    padding: 16,
     paddingBottom: 40,
   },
-  searchSection: {
-    marginBottom: 16,
+  header: {
+    marginBottom: 14,
   },
-  searchInput: {
-    borderWidth: 1,
-    borderColor: colours.borderColour,
-    padding: 12,
-    borderRadius: 8,
-    fontSize: 14,
-    backgroundColor: colours.cardBg,
-    color: colours.textPrimary,
+  title: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#1F2937',
   },
-  filterSection: {
-    marginBottom: 16,
+  subtitle: {
+    fontSize: 13,
+    color: '#6B7280',
   },
-  filterLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    marginBottom: 8,
-    color: colours.textSecondary,
-  },
-  filterChips: {
+
+  navRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+    gap: 10,
+    marginBottom: 18,
   },
-  filterChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    backgroundColor: colours.backgroundDark,
-  },
-  filterChipActive: {
+  navPrimary: {
+    flex: 1,
     backgroundColor: colours.accentBlue,
-  },
-  filterChipText: {
-    color: colours.textSecondary,
-    fontWeight: '500',
-    fontSize: 12,
-  },
-  filterChipTextActive: {
-    color: '#fff',
-  },
-  emptyState: {
-    alignItems: 'center',
-    marginTop: 40,
-  },
-  emptyStateTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 8,
-    color: colours.textPrimary,
-  },
-  emptyStateText: {
-    color: colours.textSecondary,
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  emptyStateButton: {
-    backgroundColor: colours.accentBlue,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
+    paddingVertical: 10,
     borderRadius: 6,
+    alignItems: 'center',
   },
-  emptyStateButtonText: {
+  navPrimaryText: {
     color: '#fff',
     fontWeight: '600',
+    fontSize: 13,
   },
-  habitCard: {
-    backgroundColor: colours.cardBg,
-    padding: 16,
-    marginBottom: 12,
+  navSecondary: {
+    flex: 1,
+    backgroundColor: '#fff',
+    paddingVertical: 10,
+    borderRadius: 6,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  navSecondaryText: {
+    color: '#374151',
+    fontWeight: '600',
+    fontSize: 13,
+  },
+
+  card: {
+    backgroundColor: '#fff',
+    padding: 14,
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    marginBottom: 20,
+  },
+  progressRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  progressLabel: {
+    fontSize: 13,
+    color: '#6B7280',
+  },
+  progressValue: {
+    fontWeight: '700',
+  },
+  progressBar: {
+    height: 6,
+    backgroundColor: '#E5E7EB',
+    borderRadius: 3,
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: colours.accentBlue,
+  },
+
+  habitCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    padding: 14,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    marginBottom: 10,
     borderLeftWidth: 4,
   },
-  habitHeader: {
-    marginBottom: 8,
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderWidth: 2,
+    borderColor: '#9CA3AF',
+    marginRight: 12,
+  },
+  checkboxChecked: {
+    backgroundColor: colours.accentBlue,
+    borderColor: colours.accentBlue,
+  },
+  habitInfo: {
+    flex: 1,
   },
   habitName: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: colours.textPrimary,
-  },
-  habitCategory: {
-    fontSize: 12,
-    color: colours.textSecondary,
-    marginTop: 4,
-  },
-  habitDescription: {
-    fontSize: 13,
-    color: colours.textSecondary,
-    marginBottom: 12,
-  },
-  buttonGroup: {
-    flexDirection: 'row',
-    gap: 8,
-    justifyContent: 'space-between',
-  },
-  logButton: {
-    flex: 1,
-    backgroundColor: colours.catHealth,
-    padding: 10,
-    borderRadius: 6,
-    alignItems: 'center',
-  },
-  editButton: {
-    flex: 1,
-    backgroundColor: colours.accentBlue,
-    padding: 10,
-    borderRadius: 6,
-    alignItems: 'center',
-  },
-  deleteButton: {
-    flex: 1,
-    backgroundColor: colours.catFitness,
-    padding: 10,
-    borderRadius: 6,
-    alignItems: 'center',
-  },
-  buttonText: {
-    color: '#fff',
     fontWeight: '600',
+    fontSize: 14,
+  },
+  habitMeta: {
     fontSize: 12,
+    color: '#6B7280',
   },
-  addButton: {
+  deleteText: {
+    fontSize: 12,
+    color: '#DC2626',
+  },
+
+  primaryButton: {
     backgroundColor: colours.accentBlue,
-    paddingHorizontal: 20,
     paddingVertical: 14,
-    borderRadius: 8,
+    borderRadius: 6,
     alignItems: 'center',
-    marginTop: 20,
-    marginBottom: 12,
+    marginTop: 10,
   },
-  addButtonText: {
+  primaryButtonText: {
     color: '#fff',
     fontWeight: '700',
-    fontSize: 16,
   },
-  statsButton: {
-    backgroundColor: colours.catHealth,
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderRadius: 8,
+
+  center: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
-  },
-  statsButtonText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 16,
   },
 });

@@ -1,18 +1,17 @@
-// Based on Week 4 tutorial - Login and registration screen
-// Demonstrates form handling, user authentication, and database queries
-// Week 3 tutorial: useState/useEffect hooks for form state management
-// Week 11 tutorial: Drizzle ORM for user database queries
+// Login screen - Clean centred UI
+// Week 3: useState for form handling
+// Week 8: AuthContext for global state
+// Week 11: Drizzle ORM for database queries
 
 import { useRouter } from 'expo-router';
 import { useContext, useEffect, useState } from 'react';
 import {
   Alert,
   SafeAreaView,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from 'react-native';
 import FormField from '../components/FormField';
 import { colours } from '../constants/colours';
@@ -22,25 +21,23 @@ import { AuthContext } from './_layout';
 
 export default function LoginScreen() {
   const router = useRouter();
-  // Access setUser and user from authentication context to update global user state
   const { setUser, user } = useContext(AuthContext);
 
-  // If user is already logged in, redirect to home screen
+  // Week 8: Redirect if already logged in
   useEffect(() => {
     if (user) {
       router.replace('/');
     }
-  }, [user, router]);
+  }, [user]);
 
-  // Form state management for login and registration modes
+  // Week 3: Form state
   const [isRegistering, setIsRegistering] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // Handle user login - query database for matching email and password
-  // Uses Drizzle ORM to select user records (Week 11 tutorial)
+  // LOGIN
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
       Alert.alert('Error', 'Please fill in all fields');
@@ -50,34 +47,25 @@ export default function LoginScreen() {
     setIsLoading(true);
 
     try {
-      // Query users table for matching email and password
-      // In production, passwords would be hashed using bcrypt
       const result = await db.select().from(users);
+
       const foundUser = result.find(
         (u: any) => u.email === email && u.password === password
       );
 
       if (foundUser) {
-        // Login successful - update global user state via context
-        setUser({
-          id: foundUser.id,
-          email: foundUser.email,
-          name: foundUser.name,
-        });
-        Alert.alert('Success', `Welcome back, ${foundUser.name}`);
+        setUser(foundUser);
       } else {
         Alert.alert('Error', 'Invalid email or password');
       }
-    } catch (error) {
-      console.error('Login error:', error);
-      Alert.alert('Error', 'Failed to login');
+    } catch {
+      Alert.alert('Error', 'Login failed');
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Handle user registration - insert new user into database
-  // Uses Drizzle ORM insert method (Week 11 tutorial)
+  // REGISTER
   const handleRegister = async () => {
     if (!email.trim() || !password.trim() || !name.trim()) {
       Alert.alert('Error', 'Please fill in all fields');
@@ -87,16 +75,14 @@ export default function LoginScreen() {
     setIsLoading(true);
 
     try {
-      // Check if user already exists
       const result = await db.select().from(users);
-      const existingUser = result.find((u: any) => u.email === email);
+      const exists = result.find((u: any) => u.email === email);
 
-      if (existingUser) {
+      if (exists) {
         Alert.alert('Error', 'Email already registered');
         return;
       }
 
-      // INSERT new user record into database
       await db.insert(users).values({
         email,
         password,
@@ -104,36 +90,34 @@ export default function LoginScreen() {
         createdAt: new Date().toISOString(),
       });
 
-      Alert.alert('Success', 'Account created! Please login');
-      setIsRegistering(false); // Switch back to login mode
+      Alert.alert('Success', 'Account created');
+      setIsRegistering(false);
       setEmail('');
       setPassword('');
       setName('');
-    } catch (error) {
-      console.error('Registration error:', error);
-      Alert.alert('Error', 'Failed to create account');
+    } catch {
+      Alert.alert('Error', 'Registration failed');
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colours.backgroundLight }}>
-      <ScrollView contentContainerStyle={styles.container}>
-        {/* App branding */}
+    <SafeAreaView style={styles.screen}>
+      <View style={styles.container}>
+
+        {/* Branding - centred (Week 4 UX hierarchy) */}
         <View style={styles.header}>
-          <Text style={styles.logo}>Habit Tracker</Text>
-          <Text style={styles.subtitle}>
-            {isRegistering ? 'Create an account' : 'Sign in to your account'}
-          </Text>
+          <Text style={styles.title}>Tide</Text>
+          <Text style={styles.subtitle}>Your Daily Rhythm</Text>
         </View>
 
-        {/* Form fields */}
-        <View style={styles.formSection}>
+        {/* Form */}
+        <View style={styles.form}>
           {isRegistering && (
             <FormField
               label="Full Name"
-              placeholder="e.g., John Doe"
+              placeholder="Enter your name"
               value={name}
               onChangeText={setName}
             />
@@ -141,124 +125,107 @@ export default function LoginScreen() {
 
           <FormField
             label="Email"
-            placeholder="e.g., user@example.com"
+            placeholder="Enter your email"
             value={email}
             onChangeText={setEmail}
           />
 
           <FormField
             label="Password"
-            placeholder="Enter your password"
+            placeholder="Enter password"
             value={password}
             onChangeText={setPassword}
             secureTextEntry
           />
+
+          {/* Primary Button */}
+          <TouchableOpacity
+            onPress={isRegistering ? handleRegister : handleLogin}
+            style={styles.button}
+          >
+            <Text style={styles.buttonText}>
+              {isLoading
+                ? 'Loading...'
+                : isRegistering
+                ? 'Create Account'
+                : 'Sign In'}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Toggle */}
+          <TouchableOpacity
+            onPress={() => {
+              setIsRegistering(!isRegistering);
+              setEmail('');
+              setPassword('');
+              setName('');
+            }}
+          >
+            <Text style={styles.toggle}>
+              {isRegistering
+                ? 'Already have an account? Sign in'
+                : "Don't have an account? Create one"}
+            </Text>
+          </TouchableOpacity>
         </View>
 
-        {/* Submit button - either Login or Register */}
-        <TouchableOpacity
-          onPress={isRegistering ? handleRegister : handleLogin}
-          disabled={isLoading}
-          style={[styles.submitButton, isLoading && styles.submitButtonDisabled]}
-        >
-          <Text style={styles.submitButtonText}>
-            {isLoading ? 'Loading...' : isRegistering ? 'Create Account' : 'Sign In'}
-          </Text>
-        </TouchableOpacity>
-
-        {/* Toggle between login and registration modes */}
-        <TouchableOpacity
-          onPress={() => {
-            setIsRegistering(!isRegistering);
-            setEmail('');
-            setPassword('');
-            setName('');
-          }}
-          style={styles.toggleButton}
-        >
-          <Text style={styles.toggleButtonText}>
-            {isRegistering
-              ? 'Already have an account? Sign in'
-              : "Don't have an account? Create one"}
-          </Text>
-        </TouchableOpacity>
-
-        {/* Demo credentials hint */}
-        <View style={styles.demoSection}>
-          <Text style={styles.demoTitle}>Demo Account</Text>
-          <Text style={styles.demoText}>Email: demo@example.com</Text>
-          <Text style={styles.demoText}>Password: password123</Text>
-        </View>
-      </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }
 
+// Styling (Week 4: clean spacing + alignment)
 const styles = StyleSheet.create({
-  container: {
-    padding: 24,
-    paddingBottom: 40,
-    justifyContent: 'center',
-    minHeight: '100%',
+  screen: {
+    flex: 1,
+    backgroundColor: '#F8F6F1',
   },
+
+  container: {
+    flex: 1,
+    justifyContent: 'center',
+    padding: 24,
+  },
+
   header: {
     alignItems: 'center',
     marginBottom: 40,
   },
-  logo: {
-    fontSize: 32,
+
+  title: {
+    fontSize: 34,
     fontWeight: '800',
-    color: colours.textPrimary,
-    marginBottom: 8,
+    color: '#1F2937',
   },
+
   subtitle: {
-    fontSize: 14,
-    color: colours.textSecondary,
+    fontSize: 13,
+    color: '#6B7280',
+    marginTop: 4,
   },
-  formSection: {
-    marginBottom: 24,
+
+  form: {
+    width: '100%',
   },
-  submitButton: {
+
+  button: {
     backgroundColor: colours.accentBlue,
     paddingVertical: 14,
-    borderRadius: 8,
+    borderRadius: 6,
     alignItems: 'center',
-    marginBottom: 16,
+    marginTop: 12,
   },
-  submitButtonDisabled: {
-    opacity: 0.6,
-  },
-  submitButtonText: {
+
+  buttonText: {
     color: '#fff',
     fontWeight: '700',
-    fontSize: 16,
   },
-  toggleButton: {
-    paddingVertical: 12,
-    alignItems: 'center',
-    marginBottom: 32,
-  },
-  toggleButtonText: {
+
+  toggle: {
+    textAlign: 'center',
+    marginTop: 14,
     color: colours.accentBlue,
     fontWeight: '600',
-    fontSize: 14,
-  },
-  demoSection: {
-    backgroundColor: colours.backgroundDark,
-    padding: 16,
-    borderRadius: 8,
-    borderLeftWidth: 4,
-    borderLeftColor: colours.accentBlue,
-  },
-  demoTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colours.textPrimary,
-    marginBottom: 8,
-  },
-  demoText: {
-    fontSize: 12,
-    color: colours.textSecondary,
-    marginBottom: 4,
+    fontSize: 13,
   },
 });

@@ -1,7 +1,8 @@
-// Based on Week 4 tutorial - Form screen for adding/editing habits
-// Demonstrates form handling with useState and database insert/update operations
-// Week 11 tutorial: Drizzle ORM for database insert and update operations
-// Week 3 tutorial: React hooks (useState, useEffect) for form state management
+// Based on Week 4 tutorial - Form screen (controlled inputs)
+// Week 3: useState/useEffect for managing form state
+// Week 11: Drizzle ORM for CREATE and UPDATE operations
+// Week 8: Context used for global loading state
+// This version improves UI using Week 4 UX principles: hierarchy, spacing, clarity
 
 import { eq } from 'drizzle-orm';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -16,12 +17,10 @@ import {
   View,
 } from 'react-native';
 import FormField from '../components/FormField';
-import { colours } from '../constants/colours';
 import { db } from '../db/client';
 import { categories as categoriesTable, habits as habitsTable } from '../db/schema';
 import { AuthContext } from './_layout';
 
-// Type definition for Category record
 type Category = {
   id: number;
   name: string;
@@ -31,10 +30,10 @@ type Category = {
 
 export default function AddHabitScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams(); // Get habit ID from route params for editing
+  const { id } = useLocalSearchParams();
   const { isLoading } = useContext(AuthContext);
 
-  // Form state management using useState hook (Week 3 tutorial)
+  // Week 3: controlled form state
   const [habitName, setHabitName] = useState('');
   const [habitDescription, setHabitDescription] = useState('');
   const [selectedCategory, setSelectedCategory] = useState(1);
@@ -42,47 +41,34 @@ export default function AddHabitScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
 
-  // useEffect hook to load categories and habit data on mount
-  // Pattern from Week 3 tutorial - empty dependency array [] means runs once
+  // Week 3: load initial data
   useEffect(() => {
     loadCategories();
-    if (id) {
-      loadHabitForEditing(Number(id)); // Load existing habit if editing
-    }
+    if (id) loadHabitForEditing(Number(id));
   }, [id]);
 
-  // Load all categories from database for the selector
-  // Uses Drizzle ORM pattern from Week 11 tutorial
   const loadCategories = async () => {
-    try {
-      const result = await db.select().from(categoriesTable);
-      setCategoryList(result as Category[]);
-    } catch (error) {
-      console.error('Error loading categories:', error);
-    }
+    const result = await db.select().from(categoriesTable);
+    setCategoryList(result as Category[]);
   };
 
-  // Load habit data when editing (READ operation from CRUD pattern)
-  // Uses Drizzle ORM where clause to filter by habit ID
   const loadHabitForEditing = async (habitId: number) => {
-    try {
-      const result = await db.select().from(habitsTable).where(eq(habitsTable.id, habitId));
-      if (result.length > 0) {
-        const habit = result[0];
-        setHabitName(habit.name);
-        setHabitDescription(habit.description || '');
-        setSelectedCategory(habit.categoryId);
-        setIsEditing(true); // Flag that we are in edit mode
-      }
-    } catch (error) {
-      console.error('Error loading habit:', error);
+    const result = await db
+      .select()
+      .from(habitsTable)
+      .where(eq(habitsTable.id, habitId));
+
+    if (result.length > 0) {
+      const habit = result[0];
+      setHabitName(habit.name);
+      setHabitDescription(habit.description || '');
+      setSelectedCategory(habit.categoryId);
+      setIsEditing(true);
     }
   };
 
-  // Save habit to database (CREATE or UPDATE operation from CRUD pattern)
-  // Validates input before saving (Week 4 tutorial pattern for form validation)
+  // Week 11: CREATE + UPDATE logic
   const saveHabit = async () => {
-    // Validate that habit name is not empty
     if (!habitName.trim()) {
       Alert.alert('Error', 'Habit name is required');
       return;
@@ -92,8 +78,6 @@ export default function AddHabitScreen() {
 
     try {
       if (isEditing && id) {
-        // UPDATE operation - modify existing habit
-        // Uses Drizzle ORM update and where clause (Week 11 tutorial)
         await db
           .update(habitsTable)
           .set({
@@ -103,10 +87,8 @@ export default function AddHabitScreen() {
           })
           .where(eq(habitsTable.id, Number(id)));
 
-        Alert.alert('Success', 'Habit updated');
+        Alert.alert('Updated', 'Habit updated successfully');
       } else {
-        // CREATE operation - insert new habit
-        // Uses Drizzle ORM insert method (Week 11 tutorial)
         await db.insert(habitsTable).values({
           name: habitName,
           description: habitDescription,
@@ -114,162 +96,192 @@ export default function AddHabitScreen() {
           createdAt: new Date().toISOString(),
         });
 
-        Alert.alert('Success', 'Habit created');
+        Alert.alert('Created', 'Habit added successfully');
       }
 
-      router.back(); // Navigate back to home screen after save
+      router.back();
     } catch (error) {
-      console.error('Error saving habit:', error);
+      console.error(error);
       Alert.alert('Error', 'Failed to save habit');
     } finally {
       setIsSaving(false);
     }
   };
 
-  // Show loading state while app initialises
-  if (isLoading) {
-    return (
-      <SafeAreaView style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <Text>Loading...</Text>
-      </SafeAreaView>
-    );
-  }
+  if (isLoading) return null;
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colours.backgroundLight }}>
+    <SafeAreaView style={styles.screen}>
       <ScrollView contentContainerStyle={styles.container}>
-        <Text style={styles.title}>{isEditing ? 'Edit Habit' : 'Create New Habit'}</Text>
 
-        {/* Reusable FormField component for habit name input */}
-        {/* Pattern from Week 4 tutorial on controlled form inputs */}
-        <FormField
-          label="Habit Name"
-          placeholder="e.g., Morning Run"
-          value={habitName}
-          onChangeText={setHabitName}
-        />
+        {/* Header (Week 4: visual hierarchy) */}
+        <View style={styles.header}>
+          <Text style={styles.title}>
+            {isEditing ? 'Edit Habit' : 'New Habit'}
+          </Text>
+          <Text style={styles.subtitle}>
+            Build consistency through small daily actions
+          </Text>
+        </View>
 
-        {/* Reusable FormField component for description input */}
-        <FormField
-          label="Description (optional)"
-          placeholder="e.g., 30 minutes run"
-          value={habitDescription}
-          onChangeText={setHabitDescription}
-          multiline
-        />
+        {/* Form Section */}
+        <View style={styles.card}>
+          <FormField
+            label="Habit Name"
+            placeholder="e.g. Morning run"
+            value={habitName}
+            onChangeText={setHabitName}
+          />
 
-        {/* Category selector - allows user to pick which category this habit belongs to */}
-        <View style={styles.categorySection}>
-          <Text style={styles.label}>Select Category</Text>
+          <FormField
+            label="Description"
+            placeholder="Optional"
+            value={habitDescription}
+            onChangeText={setHabitDescription}
+            multiline
+          />
+        </View>
+
+        {/* Category Selector (Improved UI) */}
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Category</Text>
+
           <View style={styles.categoryGrid}>
             {categoryList.map((cat) => (
               <TouchableOpacity
                 key={cat.id}
                 onPress={() => setSelectedCategory(cat.id)}
                 style={[
-                  styles.categoryButton,
-                  selectedCategory === cat.id && styles.categoryButtonSelected,
-                  selectedCategory === cat.id && { backgroundColor: cat.colour },
+                  styles.categoryItem,
+                  selectedCategory === cat.id && styles.categoryItemActive,
                 ]}
               >
+                <View
+                  style={[
+                    styles.categoryDot,
+                    { backgroundColor: cat.colour },
+                  ]}
+                />
                 <Text
                   style={[
-                    styles.categoryButtonText,
-                    selectedCategory === cat.id && styles.categoryButtonTextSelected,
+                    styles.categoryText,
+                    selectedCategory === cat.id && styles.categoryTextActive,
                   ]}
                 >
-                  {cat.icon} {cat.name}
+                  {cat.name}
                 </Text>
               </TouchableOpacity>
             ))}
           </View>
         </View>
 
-        {/* Save button - submits form and saves to database */}
-        <TouchableOpacity
-          onPress={saveHabit}
-          disabled={isSaving}
-          style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
-        >
-          <Text style={styles.saveButtonText}>{isSaving ? 'Saving...' : 'Save Habit'}</Text>
-        </TouchableOpacity>
+        {/* Actions */}
+        <View style={styles.actions}>
+          <TouchableOpacity
+            onPress={saveHabit}
+            disabled={isSaving}
+            style={styles.primaryButton}
+          >
+            <Text style={styles.primaryText}>
+              {isSaving ? 'Saving...' : 'Save Habit'}
+            </Text>
+          </TouchableOpacity>
 
-        {/* Cancel button - closes modal without saving */}
-        <TouchableOpacity onPress={() => router.back()} style={styles.cancelButton}>
-          <Text style={styles.cancelButtonText}>Cancel</Text>
-        </TouchableOpacity>
+          <TouchableOpacity onPress={() => router.back()}>
+            <Text style={styles.secondaryText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+
       </ScrollView>
     </SafeAreaView>
   );
 }
 
+// Week 4: spacing + consistency = better UX
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: '#F8F6F1',
+  },
   container: {
     padding: 16,
     paddingBottom: 40,
   },
+  header: {
+    marginBottom: 20,
+  },
   title: {
-    fontSize: 24,
-    fontWeight: '700',
-    marginBottom: 24,
-    color: colours.textPrimary,
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#1F2937',
   },
-  label: {
+  subtitle: {
+    fontSize: 13,
+    color: '#6B7280',
+    marginTop: 4,
+  },
+  card: {
+    backgroundColor: '#fff',
+    padding: 14,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    marginBottom: 16,
+  },
+  sectionTitle: {
     fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 12,
-    color: colours.textPrimary,
-  },
-  categorySection: {
-    marginBottom: 24,
+    fontWeight: '700',
+    marginBottom: 10,
   },
   categoryGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 10,
   },
-  categoryButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: colours.backgroundDark,
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  categoryButtonSelected: {
-    borderColor: '#fff',
-    borderWidth: 2,
-  },
-  categoryButtonText: {
-    color: colours.textSecondary,
-    fontWeight: '500',
-    fontSize: 12,
-  },
-  categoryButtonTextSelected: {
-    color: '#fff',
-  },
-  saveButton: {
-    backgroundColor: colours.accentBlue,
-    paddingVertical: 14,
-    borderRadius: 8,
+  categoryItem: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
-  saveButtonDisabled: {
-    opacity: 0.6,
+  categoryItemActive: {
+    borderColor: '#0066CC',
+    backgroundColor: '#F0F6FF',
   },
-  saveButtonText: {
+  categoryDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 6,
+  },
+  categoryText: {
+    fontSize: 13,
+    color: '#6B7280',
+  },
+  categoryTextActive: {
+    color: '#0066CC',
+    fontWeight: '600',
+  },
+  actions: {
+    marginTop: 10,
+  },
+  primaryButton: {
+    backgroundColor: '#0066CC',
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderRadius: 6,
+    marginBottom: 10,
+  },
+  primaryText: {
     color: '#fff',
     fontWeight: '700',
-    fontSize: 16,
   },
-  cancelButton: {
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  cancelButtonText: {
-    color: colours.textSecondary,
+  secondaryText: {
+    textAlign: 'center',
+    color: '#6B7280',
     fontWeight: '600',
-    fontSize: 16,
   },
 });
